@@ -1,0 +1,127 @@
+<div class="container mt-4">
+  <h2>Create New Order</h2>
+
+  <form [formGroup]="orderForm" (ngSubmit)="onSubmit()" novalidate>
+    <div *ngIf="error" class="alert alert-danger">
+      {{ error }}
+    </div>
+
+    <div class="mb-3">
+      <label for="customerName" class="form-label">Customer Name</label>
+      <input
+        type="text"
+        id="customerName"
+        formControlName="customerName"
+        class="form-control"
+        [ngClass]="{ 'is-invalid': submitted && orderForm.get('customerName')?.errors }"
+      >
+      <div *ngIf="submitted && orderForm.get('customerName')?.errors" class="invalid-feedback">
+        <div *ngIf="orderForm.get('customerName')?.errors?.['required']">Customer name is required</div>
+        <div *ngIf="orderForm.get('customerName')?.errors?.['minlength']">
+          Customer name must be at least 2 characters
+        </div>
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <label for="customerEmail" class="form-label">Customer Email</label>
+      <input
+        type="email"
+        id="customerEmail"
+        formControlName="customerEmail"
+        class="form-control"
+        [ngClass]="{ 'is-invalid': submitted && orderForm.get('customerEmail')?.errors }"
+      >
+      <div *ngIf="submitted && orderForm.get('customerEmail')?.errors" class="invalid-feedback">
+        <div *ngIf="orderForm.get('customerEmail')?.errors?.['required']">Email is required</div>
+        <div *ngIf="orderForm.get('customerEmail')?.errors?.['email']">Please enter a valid email</div>
+      </div>
+    </div>
+
+    <h4>Order Items</h4>
+    <div formArrayName="items">
+      <div *ngFor="let item of items; let i = index" class="card mb-3" [formGroupName]="i">
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-3">
+              <label for="productId-{{i}}" class="form-label">Product ID</label>
+              <input
+                type="text"
+                id="productId-{{i}}"
+                formControlName="productId"
+                class="form-control"
+                [ngClass]="{ 'is-invalid': submitted && item.get('productId')?.errors }"
+              >
+              <div *ngIf="submitted && item.get('productId')?.errors" class="invalid-feedback">
+                Product ID is required
+              </div>
+            </div>
+            <div class="col-md-3">
+              <label for="productName-{{i}}" class="form-label">Product Name</label>
+              <input
+                type="text"
+                id="productName-{{i}}"
+                formControlName="productName"
+                class="form-control"
+                [ngClass]="{ 'is-invalid': submitted && item.get('productName')?.errors }"
+              >
+              <div *ngIf="submitted && item.get('productName')?.errors" class="invalid-feedback">
+                Product name is required
+              </div>
+            </div>
+            <div class="col-md-2">
+              <label for="quantity-{{i}}" class="form-label">Quantity</label>
+              <input
+                type="number"
+                id="quantity-{{i}}"
+                formControlName="quantity"
+                class="form-control"
+                [ngClass]="{ 'is-invalid': submitted && item.get('quantity')?.errors }"
+                min="1"
+              >
+              <div *ngIf="submitted && item.get('quantity')?.errors" class="invalid-feedback">
+                <div *ngIf="item.get('quantity')?.errors?.['required']">Quantity is required</div>
+                <div *ngIf="item.get('quantity')?.errors?.['min']">Quantity must be at least 1</div>
+              </div>
+            </div>
+            <div class="col-md-2">
+              <label for="price-{{i}}" class="form-label">Price</label>
+              <input
+                type="number"
+                id="price-{{i}}"
+                formControlName="price"
+                class="form-control"
+                [ngClass]="{ 'is-invalid': submitted && item.get('price')?.errors }"
+                min="0"
+                step="0.01"
+              >
+              <div *ngIf="submitted && item.get('price')?.errors" class="invalid-feedback">
+                <div *ngIf="item.get('price')?.errors?.['required']">Price is required</div>
+                <div *ngIf="item.get('price')?.errors?.['min']">Price must be at least 0</div>
+              </div>
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+              <button
+                type="button"
+                class="btn btn-danger"
+                (click)="removeItem(i)"
+                [disabled]="items.length === 1"
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <button type="button" class="btn btn-secondary mb-3" (click)="addItem()">
+      Add Item
+    </button>
+
+    <button type="submit" class="btn btn-primary" [disabled]="submitted">
+      {{ submitted ? 'Submitting...' : 'Submit Order' }}
+    </button>
+    <a routerLink="/orders" class="btn btn-outline-secondary ms-2">Cancel</a>
+  </form>
+</div>

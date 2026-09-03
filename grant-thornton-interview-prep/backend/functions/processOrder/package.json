@@ -1,0 +1,20 @@
+{
+  "name": "processOrder",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "tsc",
+    "start": "func start",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@azure/functions": "^4.0.0",
+    "@azure/service-bus": "^7.0.0",
+    "@azure/identity": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.0.0",
+    "jest": "^29.0.0",
+    "ts-jest": "^29.0.0",
+    "typescript": "^5.0.0"
+  }
+}

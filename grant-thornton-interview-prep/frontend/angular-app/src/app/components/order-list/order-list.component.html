@@ -1,0 +1,48 @@
+<div class="container mt-4">
+  <h2>Orders</h2>
+
+  <div *ngIf="loading" class="spinner-border text-primary" role="status">
+    <span class="visually-hidden">Loading...</span>
+  </div>
+
+  <div *ngIf="error" class="alert alert-danger">
+    {{ error }}
+    <button class="btn btn-sm btn-outline-danger ms-2" (click)="loadOrders()">Retry</button>
+  </div>
+
+  <div *ngIf="!loading && !error">
+    <table class="table table-striped">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Customer</th>
+          <th>Status</th>
+          <th>Items</th>
+          <th>Total</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let order of orders$ | async">
+          <td>{{ order.id }}</td>
+          <td>{{ order.customerName }}</td>
+          <td>
+            <span [class.badge]="true" [ngClass]="{
+              'bg-secondary': order.status === 'pending',
+              'bg-primary': order.status === 'processing',
+              'bg-success': order.status === 'completed',
+              'bg-danger': order.status === 'failed'
+            }">
+              {{ order.status }}
+            </span>
+          </td>
+          <td>{{ order.items.length }}</td>
+          <td>{{ order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0) | currency:'GBP ' }}</td>
+          <td>
+            <a [routerLink]="['/orders', order.id]" class="btn btn-sm btn-info">View</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>

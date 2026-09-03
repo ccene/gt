@@ -1,0 +1,67 @@
+<div class="container mt-4" *ngIf="order$ | async as order">
+  <div *ngIf="loading" class="spinner-border text-primary" role="status">
+    <span class="visually-hidden">Loading...</span>
+  </div>
+
+  <div *ngIf="error" class="alert alert-danger">
+    {{ error }}
+  </div>
+
+  <div *ngIf="order && !loading && !error">
+    <div class="card">
+      <div class="card-header">
+        <h2>Order #{{ order.id }}</h2>
+      </div>
+      <div class="card-body">
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <h4>Customer Details</h4>
+            <p><strong>Name:</strong> {{ order.customerName }}</p>
+            <p><strong>Email:</strong> {{ order.customerEmail }}</p>
+            <p><strong>Status:</strong>
+              <span [class.badge]="true" [ngClass]="{
+                'bg-secondary': order.status === 'pending',
+                'bg-primary': order.status === 'processing',
+                'bg-success': order.status === 'completed',
+                'bg-danger': order.status === 'failed'
+              }">
+                {{ order.status }}
+              </span>
+            </p>
+          </div>
+          <div class="col-md-6">
+            <h4>Order Summary</h4>
+            <p><strong>Created:</strong> {{ order.createdAt | date:'medium' }}</p>
+            <p><strong>Items:</strong> {{ order.items.length }}</p>
+            <p><strong>Total:</strong>
+              {{ order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0) | currency:'GBP ' }}
+            </p>
+          </div>
+        </div>
+
+        <h4>Items</h4>
+        <table class="table table-striped">
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th>Quantity</th>
+              <th>Price</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let item of order.items">
+              <td>{{ item.productName }}</td>
+              <td>{{ item.quantity }}</td>
+              <td>{{ item.price | currency:'GBP ' }}</td>
+              <td>{{ item.price * item.quantity | currency:'GBP ' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card-footer">
+        <a routerLink="/orders" class="btn btn-secondary">Back to List</a>
+      </div>
+    </div>
+  </div>
+</div>

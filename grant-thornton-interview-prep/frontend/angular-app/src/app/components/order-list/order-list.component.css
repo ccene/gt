@@ -1,0 +1,13 @@
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.table {
+  margin-top: 20px;
+}
+
+.spinner-border {
+  margin: 20px auto;
+  display: block;
+}

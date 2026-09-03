@@ -1,0 +1,65 @@
+trigger:
+- main
+
+variables:
+  azureSubscription: 'YOUR_AZURE_SERVICE_CONNECTION_NAME' # Set up in Azure DevOps
+  resourceGroupName: 'grant-thornton-prep-rg'
+  location: 'UK South'
+
+stages:
+- stage: DeployInfra
+  displayName: Deploy Infrastructure
+  jobs:
+  - job: DeployBicep
+    displayName: Deploy Bicep Templates
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - task: AzureCLI@2
+      displayName: 'Deploy Bicep'
+      inputs:
+        azureSubscription: $(azureSubscription)
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          az deployment group create \
+            --resource-group $(resourceGroupName) \
+            --template-file backend/bicep/main.bicep \
+            --parameters @backend/bicep/parameters.json \
+            --mode Complete
+
+- stage: DeployFunctions
+  displayName: Deploy Functions
+  dependsOn: DeployInfra
+  jobs:
+  - job: BuildAndDeploy
+    displayName: Build and Deploy Functions
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - task: NodeTool@0
+      inputs:
+        versionSpec: '18.x'
+      displayName: 'Install Node.js'
+
+    - script: |
+        npm install -g azure-functions-core-tools@4
+        cd backend/functions/submitOrder && npm install
+        cd ../processOrder && npm install
+        cd ../notifyOrderProcessed && npm install
+      displayName: 'Install dependencies'
+
+    - script: |
+        cd backend/functions/submitOrder && npm run build
+        cd ../processOrder && npm run build
+        cd ../notifyOrderProcessed && npm run build
+      displayName: 'Build Functions'
+
+    - task: AzureFunctionApp@1
+      inputs:
+        azureSubscription: $(azureSubscription)
+        appType: 'functionApp'
+        appName: 'func${{ variables.resourceGroupName }}${{ variables.location }}'
+        package: 'backend/functions'
+        deploymentMethod: 'auto'
+      displayName: 'Deploy Functions to Azure'
