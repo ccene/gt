@@ -308,3 +308,20 @@ button.danger {
     transition: none !important;
   }
 }
+
+.rec-indicator {
+  color: #ff8a80;
+  font-weight: 700;
+  margin: 0;
+}
+
+.transcript {
+  background: var(--panel-2);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin: 0;
+}
+
+.small {
+  font-size: 0.85rem;
+}

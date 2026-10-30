@@ -1,0 +1,24 @@
+[Unit]
+Description=D&D Table Companion (LAN only)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=/opt/dnd-table
+EnvironmentFile=/opt/dnd-table/.env
+ExecStart=/opt/dnd-table/.venv/bin/python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000
+Restart=on-failure
+RestartSec=5
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/dnd-table/data /opt/dnd-table/outbox
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

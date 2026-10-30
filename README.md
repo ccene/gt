@@ -50,3 +50,7 @@ the `dice` event in real time.
 
 Configuration is via environment variables — copy `.env.example` to `.env`.
 All AI provider keys are optional; without them the app uses local fallbacks.
+
+## Pi / laptop deployment
+See [deploy/README.md](deploy/README.md): `sudo scripts/harden-host.sh` (default-deny
+firewall, app port open to LAN only) + `deploy/dnd-table.service` systemd unit.

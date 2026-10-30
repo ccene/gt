@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "./api";
 import { useApp } from "./store";
 import { connectWs, wsSend } from "./ws";
+import AudioPanel, { VisionButton } from "./AudioPanel";
 import "./styles.css";
 
 const FACES = [4, 6, 8, 10, 12, 20, 100];
@@ -238,6 +239,8 @@ export default function App() {
       {state === "lobby" && <CharacterForm />}
       <TableView />
       <DicePad />
+      <AudioPanel />
+      <VisionButton />
       <HostControls />
     </div>
   );
