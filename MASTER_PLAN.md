@@ -12,7 +12,8 @@ app must run at zero extra cost using free tiers and local fallbacks.
 2. Real-time during the session so immersion never breaks: all heavy work
    (story generation, map/NPC prep, model warm-up) happens in the loading /
    chapter-transition phase, like video-game loading screens.
-3. Zero extra spend: only free tiers and locally runnable models (see §5).
+3. No new spend and no US LLM providers: Mistral AI (EU-hosted, existing
+   plan) first, with a fully local Ollama fallback (see §5).
 4. Robust automated testing at every layer, enforced by CI.
 5. Mobile-first design: designed at 360px width first, scaled up.
 
@@ -75,7 +76,7 @@ players' phones/iPads (PWA, mobile-first)
 | Real-time    | WebSocket (FastAPI)             | Dice/map/narration sync to all clients         |
 | State        | Server-authoritative            | Phones are thin views; Pi is the game master   |
 | TTS          | Browser SpeechSynthesis first   | Free, works on iPad Safari, zero latency setup |
-| STT          | Browser capture + free cloud STT| See §5                                          |
+| STT          | Browser capture + local Whisper | Fully local, no US services                     |
 | Tests        | pytest + Vitest + Playwright    | Unit, API/WS integration, mobile-viewport e2e  |
 | CI           | GitHub Actions                  | Lint, typecheck, tests, coverage, build, e2e   |
 | Packaging    | `scripts/run.sh` + systemd unit | One-command run on laptop/Pi                   |
@@ -92,23 +93,60 @@ players' phones/iPads (PWA, mobile-first)
 - Layout: bottom navigation for thumbs; the "table view" (map + scene) is
   the default landing screen during play and is readable from across a table.
 
-## 5. AI: free-tier only, provider-agnostic, always has a fallback
+## 5. AI: Mistral first, Ollama local fallback, no US providers, always a fallback
 
 A single `AIAdapter` interface (`chat`, `vision`, `stt`, `embed`) with a
 configured priority chain. Every call has a deterministic local fallback
 (template-based narration / rulebook lookup), so the app never breaks when a
 key is missing or the network is down.
 
-Priority chain (first available wins, all free tiers):
+Priority chain (first available wins):
 
-1. Groq free tier (fast chat, generous free limits) — DM narration, notes.
-2. Google AI Studio (Gemini) free tier — story generation, shaping, vision.
-3. Hugging Face Inference (free endpoints) — STT (Whisper), embeddings.
-4. Ollama running locally on the host — fully offline fallback for chat/STT.
+1. **Mistral AI** (La Plateforme, EU-hosted, GDPR-compliant, EU data
+   residency — no player data goes to US services):
+   - chat: `mistral-large-latest` (or the model in your plan) — DM
+     narration, story generation/shaping, table-conversation notes
+   - vision: Pixtral — reading physical maps/miniatures from the camera
+   - embeddings: Mistral Embed — story/session memory retrieval
+2. **Ollama running locally on the host** — fully offline, zero data leaving
+   the machine: chat (e.g., llama3.2), embeddings (nomic-embed-text), and
+   STT via a local Whisper model (faster-whisper / whisper.cpp).
 
-All keys are optional env vars; the app boots and plays with none of them.
-Free email sending: any free SMTP (e.g., Gmail app password) or Resend free
-tier (100 emails/day); in dev, emails go to a file outbox instead.
+Cost and latency control: all model calls happen in the loading/chapter
+phase (never in the real-time play loop) and are cached in SQLite, so a
+session replays with zero API calls. During play, narration uses cached
+outputs plus browser TTS.
+
+### Cost model (fits inside your existing Mistral plan allowance)
+
+Mistral Pro bundles a monthly API-credit allowance (≈ $30/month on the
+current Pro card — confirm the exact figure in your La Plateforme admin
+console; it has changed over time). Anything beyond the allowance is
+billed per token, so the app adds three guardrails:
+
+1. **Cheap-by-default routing**: DM narration and notes default to
+   `mistral-small-latest` ($0.15/$0.60 per M tokens); Large is used only
+   for story generation/shaping. Prompt caching (up to 90% off repeated
+   input) is always on.
+2. **Hard app-level budget cap**: `MISTRAL_MONTHLY_BUDGET_USD` (default
+   25). The app tracks spend in SQLite and, once the cap is reached,
+   automatically fails over to local Ollama for the rest of the month.
+   A hard spend limit should also be set in the La Plateforme console.
+3. **Caching + phase restriction**: model calls only in loading/chapter
+   phases and cached, so replays and retries cost nothing.
+
+Estimate for your usage pattern (one ~4 h session every other week, ~8
+sessions/month, 4 players): story prep + notes + arbitration ≈ 250 K input
++ 80 K output tokens per session on a Small/Large mix ≈ **$2–4/month** —
+comfortably inside the bundled allowance, and the budget cap guarantees
+no surprise overage.
+
+No US-based LLM providers are used anywhere in the chain. STT is local
+Whisper on the host; vision is Mistral Pixtral when online.
+
+All keys are optional env vars; the app boots and plays fully offline with
+none of them. Email: any SMTP provider you already use; in dev, emails are
+written to a local `./outbox/` instead of being sent.
 
 ## 6. Data model (SQLite)
 
@@ -148,8 +186,11 @@ On every PR and push to main:
 4. E2E: Playwright mobile-viewport smoke (boots server, runs key flows).
 5. Artifact: built PWA uploaded for manual QA on a real device.
 
-Jobs for backend/frontend activate automatically once `backend/` and
-`frontend/` exist (path-guarded), so CI is green from day one.
+The backend/frontend/e2e jobs are disabled (`if: false`) until `backend/`
+and `frontend/` exist, so CI is green from day one. Note: `hashFiles()`
+in a job-level `if` is not used because it breaks workflow parsing in this
+environment; when the app scaffold lands, replace the constant guards with
+path detection (e.g., a small setup script writing `backend/.ci-enabled`).
 
 ## 9. Running on a laptop / Raspberry Pi
 
@@ -161,7 +202,49 @@ Jobs for backend/frontend activate automatically once `backend/` and
 - Security: LAN-only by default, optional access token, no secrets in repo
   (`.env.example` documents everything; `.env` is gitignored).
 
-## 10. Roadmap
+## 10. Security (ironclad by design)
+
+Threat model: the app lives on a home LAN and must never be reachable from
+the internet; API keys and player data must never leave the machine except
+to Mistral's EU endpoints; the host account is protected with MFA/passkeys.
+
+- **Network exposure**: binds to the LAN interface only (never 0.0.0.0 on a
+  WAN-facing host); `ufw`/firewall default-deny inbound, allow only the app
+  port from the LAN subnet; optionally isolate the host on a guest/IoT VLAN.
+  No tunnels, no public ingress, no open ports. HTTPS via a locally trusted
+  cert (mkcert/Caddy) so all traffic on the LAN is encrypted; HSTS on.
+  Remote access, if ever needed, only via WireGuard/Tailscale, not port
+  forwarding.
+- **Authentication**: players join a session with a random 6-digit code +
+  per-session 256-bit token (stored hashed, rotated every session, rate
+  limited). Host/admin actions (start session, end session, email save
+  points, change settings) are gated by **WebAuthn passkey** — no passwords
+  anywhere; register a platform passkey on the host laptop/Pi. Optional
+  `ACCESS_TOKEN` env adds a second factor for admin endpoints.
+- **Secrets**: `MISTRAL_API_KEY`, SMTP credentials, and tokens live only in
+  `.env` (chmod 600) or a systemd `EnvironmentFile` with 0600 perms — never
+  in git, never in logs, never in the DB. CI scans history for secrets
+  (gitleaks) plus the `scripts/check-repo.sh` heuristic check. Use a
+  **dedicated API key** (not your personal one) with a workspace/org spend
+  cap, enable **MFA on the Mistral account**, and rotate the key immediately
+  if it ever appears in a log or commit. Keys are loaded at process start
+  and zeroed on shutdown where the OS allows.
+- **Data at rest**: SQLite DB and all media in `./data/` with directory
+  perms 0700; optional SQLCipher encryption; backups are encrypted
+  (age/gpg) to local disk/USB only — no cloud sync. Raw microphone audio
+  and camera frames are never written to disk: STT runs locally (Whisper)
+  and only transcripts are stored; vision frames go to Mistral Pixtral (EU)
+  only during an explicit vision action, with an on-screen recording
+  indicator, and are discarded after the call. Retention is configurable;
+  session end can purge transcripts.
+- **Supply chain / hygiene**: dependabot for Actions/pip/npm; `unattended-
+  upgrades` on the Pi; CI runs pip-audit, npm audit, bandit, and gitleaks
+  on every PR; minimal dependency footprint.
+- **Audit**: append-only audit log (who joined, who rolled, admin actions,
+  AI calls with token counts) in SQLite, viewable by the passkey-authenticated
+  host.
+
+## 11. Roadmap
 
 | Phase | Deliverable                                                            |
 |-------|------------------------------------------------------------------------|
@@ -169,7 +252,7 @@ Jobs for backend/frontend activate automatically once `backend/` and
 | P1    | Backend core: models, REST, SQLite, dice, session state machine, tests |
 | P2    | Mobile-first PWA shell: lobby, character submit, table view, PWA setup |
 | P3    | Real-time engine: WebSocket sync, map view, synced dice, Playwright e2e|
-| P4    | AI adapter + free-tier chain + fallbacks; DM narration; story gen/import|
+| P4    | AI adapter (Mistral + Ollama) + fallbacks; DM narration; story gen/import|
 | P5    | Audio: TTS narration, mic capture + STT notes; camera vision (optional)|
 | P6    | End-of-session email with updated sheet + save point                   |
 | P7    | Pi deployment hardening, systemd, performance pass, docs               |

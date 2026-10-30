@@ -1,0 +1,16 @@
+[title]
+# gitleaks config — only real, high-entropy secrets fail the build.
+# Placeholders and .env.example templates are allowlisted.
+
+[allowlist]
+  description = "Allowlisted non-secret patterns"
+  paths = [
+    '''\.env\.example$''',
+    '''MASTER_PLAN\.md$''',
+    '''README\.md$''',
+    '''scripts/check-repo\.sh$''',
+  ]
+  regexes = [
+    '''(?i)(api[_-]?key|secret|password|token)\s*[:=]\s*$''',
+    '''example|placeholder|changeme|xxx|your[-_][a-z-]*''',
+  ]
