@@ -199,7 +199,7 @@ Jobs for backend/frontend activate automatically once `backend/` and
 - Security: LAN-only by default, optional access token, no secrets in repo
   (`.env.example` documents everything; `.env` is gitignored).
 
-## 11. Security (ironclad by design)
+## 10. Security (ironclad by design)
 
 Threat model: the app lives on a home LAN and must never be reachable from
 the internet; API keys and player data must never leave the machine except
@@ -241,7 +241,7 @@ to Mistral's EU endpoints; the host account is protected with MFA/passkeys.
   AI calls with token counts) in SQLite, viewable by the passkey-authenticated
   host.
 
-## 12. Roadmap
+## 11. Roadmap
 
 | Phase | Deliverable                                                            |
 |-------|------------------------------------------------------------------------|
