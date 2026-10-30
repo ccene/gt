@@ -2,8 +2,9 @@
 
 A real-time dungeon-master companion for the game table. A laptop or
 Raspberry Pi hosts the app; players join from phones/iPads over the local
-network via a mobile-first PWA. Cloud AI calls use free tiers only, with
-local fallbacks, so it runs at zero extra cost.
+network via a mobile-first PWA. AI calls go to Mistral (EU-hosted,
+GDPR-compliant — no US LLM providers) with a fully local Ollama fallback,
+so no new services are needed and it also runs offline.
 
 See [MASTER_PLAN.md](MASTER_PLAN.md) for the full architecture, testing
 strategy, CI, and roadmap.

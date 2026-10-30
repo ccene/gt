@@ -12,7 +12,8 @@ app must run at zero extra cost using free tiers and local fallbacks.
 2. Real-time during the session so immersion never breaks: all heavy work
    (story generation, map/NPC prep, model warm-up) happens in the loading /
    chapter-transition phase, like video-game loading screens.
-3. Zero extra spend: only free tiers and locally runnable models (see §5).
+3. No new spend and no US LLM providers: Mistral AI (EU-hosted, existing
+   plan) first, with a fully local Ollama fallback (see §5).
 4. Robust automated testing at every layer, enforced by CI.
 5. Mobile-first design: designed at 360px width first, scaled up.
 
@@ -75,7 +76,7 @@ players' phones/iPads (PWA, mobile-first)
 | Real-time    | WebSocket (FastAPI)             | Dice/map/narration sync to all clients         |
 | State        | Server-authoritative            | Phones are thin views; Pi is the game master   |
 | TTS          | Browser SpeechSynthesis first   | Free, works on iPad Safari, zero latency setup |
-| STT          | Browser capture + free cloud STT| See §5                                          |
+| STT          | Browser capture + local Whisper | Fully local, no US services                     |
 | Tests        | pytest + Vitest + Playwright    | Unit, API/WS integration, mobile-viewport e2e  |
 | CI           | GitHub Actions                  | Lint, typecheck, tests, coverage, build, e2e   |
 | Packaging    | `scripts/run.sh` + systemd unit | One-command run on laptop/Pi                   |
@@ -92,23 +93,36 @@ players' phones/iPads (PWA, mobile-first)
 - Layout: bottom navigation for thumbs; the "table view" (map + scene) is
   the default landing screen during play and is readable from across a table.
 
-## 5. AI: free-tier only, provider-agnostic, always has a fallback
+## 5. AI: Mistral first, Ollama local fallback, no US providers, always a fallback
 
 A single `AIAdapter` interface (`chat`, `vision`, `stt`, `embed`) with a
 configured priority chain. Every call has a deterministic local fallback
 (template-based narration / rulebook lookup), so the app never breaks when a
 key is missing or the network is down.
 
-Priority chain (first available wins, all free tiers):
+Priority chain (first available wins):
 
-1. Groq free tier (fast chat, generous free limits) — DM narration, notes.
-2. Google AI Studio (Gemini) free tier — story generation, shaping, vision.
-3. Hugging Face Inference (free endpoints) — STT (Whisper), embeddings.
-4. Ollama running locally on the host — fully offline fallback for chat/STT.
+1. **Mistral AI** (La Plateforme, EU-hosted, GDPR-compliant, EU data
+   residency — no player data goes to US services):
+   - chat: `mistral-large-latest` (or the model in your plan) — DM
+     narration, story generation/shaping, table-conversation notes
+   - vision: Pixtral — reading physical maps/miniatures from the camera
+   - embeddings: Mistral Embed — story/session memory retrieval
+2. **Ollama running locally on the host** — fully offline, zero data leaving
+   the machine: chat (e.g., llama3.2), embeddings (nomic-embed-text), and
+   STT via a local Whisper model (faster-whisper / whisper.cpp).
 
-All keys are optional env vars; the app boots and plays with none of them.
-Free email sending: any free SMTP (e.g., Gmail app password) or Resend free
-tier (100 emails/day); in dev, emails go to a file outbox instead.
+Cost and latency control: all model calls happen in the loading/chapter
+phase (never in the real-time play loop) and are cached in SQLite, so a
+session replays with zero API calls. During play, narration uses cached
+outputs plus browser TTS.
+
+No US-based LLM providers are used anywhere in the chain. STT is local
+Whisper on the host; vision is Mistral Pixtral when online.
+
+All keys are optional env vars; the app boots and plays fully offline with
+none of them. Email: any SMTP provider you already use; in dev, emails are
+written to a local `./outbox/` instead of being sent.
 
 ## 6. Data model (SQLite)
 
@@ -169,7 +183,7 @@ Jobs for backend/frontend activate automatically once `backend/` and
 | P1    | Backend core: models, REST, SQLite, dice, session state machine, tests |
 | P2    | Mobile-first PWA shell: lobby, character submit, table view, PWA setup |
 | P3    | Real-time engine: WebSocket sync, map view, synced dice, Playwright e2e|
-| P4    | AI adapter + free-tier chain + fallbacks; DM narration; story gen/import|
+| P4    | AI adapter (Mistral + Ollama) + fallbacks; DM narration; story gen/import|
 | P5    | Audio: TTS narration, mic capture + STT notes; camera vision (optional)|
 | P6    | End-of-session email with updated sheet + save point                   |
 | P7    | Pi deployment hardening, systemd, performance pass, docs               |
