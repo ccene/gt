@@ -22,7 +22,7 @@ jobs:
       - name: Secret scan (gitleaks)
         uses: gitleaks/gitleaks-action@v2
         with:
-          config-path: .github/gitleaks.toml
+          config: .github/gitleaks.toml
 
   backend:
     name: Backend (lint, types, tests)
