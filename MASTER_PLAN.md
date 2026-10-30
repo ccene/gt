@@ -186,8 +186,11 @@ On every PR and push to main:
 4. E2E: Playwright mobile-viewport smoke (boots server, runs key flows).
 5. Artifact: built PWA uploaded for manual QA on a real device.
 
-Jobs for backend/frontend activate automatically once `backend/` and
-`frontend/` exist (path-guarded), so CI is green from day one.
+The backend/frontend/e2e jobs are disabled (`if: false`) until `backend/`
+and `frontend/` exist, so CI is green from day one. Note: `hashFiles()`
+in a job-level `if` is not used because it breaks workflow parsing in this
+environment; when the app scaffold lands, replace the constant guards with
+path detection (e.g., a small setup script writing `backend/.ci-enabled`).
 
 ## 9. Running on a laptop / Raspberry Pi
 
