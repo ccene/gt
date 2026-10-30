@@ -49,9 +49,9 @@ class Hub:
             "INSERT INTO session_events (session_id, kind, payload) VALUES (?, ?, ?)",
             (session_id, kind, db.dumps(payload)),
         )
-        await self.broadcast(session_id, {"type": kind, "payload": payload, "ts": db.query_one(
-            "SELECT created_at AS ts FROM session_events WHERE id = last_insert_rowid()"
-        )["ts"]})
+        row = db.query_one("SELECT created_at AS ts FROM session_events WHERE id = last_insert_rowid()")
+        ts = row["ts"] if row else ""
+        await self.broadcast(session_id, {"type": kind, "payload": payload, "ts": ts})
 
 
     def snapshot(self, session_id: int) -> dict:

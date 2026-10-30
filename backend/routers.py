@@ -162,6 +162,7 @@ def create_session(payload: dict):
         (code, admin_token, story_id),
     )
     sid = cur.lastrowid
+    assert isinstance(sid, int)
     _audit(sid, "host", "session.create", {"code": code, "story_id": story_id})
     return {"id": sid, "code": code, "admin_token": admin_token, **_session_public(_require_session(sid))}
 
@@ -242,7 +243,7 @@ async def roll_dice(session_id: int, payload: dict):
 async def narrate(session_id: int, payload: dict):
     _require_session(session_id)
     scene = str(payload.get("scene", "The party stands at a crossroads."))
-    chars = [str(c.get("name", "")) for c in db.query("SELECT name FROM characters")]
+    chars = [str(c["name"]) for c in db.query("SELECT name FROM characters")]
     result = await ai.narrate_scene(scene, chars)
     await hub.log_event(session_id, "narration", result)
     return result
