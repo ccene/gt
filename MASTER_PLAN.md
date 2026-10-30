@@ -117,6 +117,30 @@ phase (never in the real-time play loop) and are cached in SQLite, so a
 session replays with zero API calls. During play, narration uses cached
 outputs plus browser TTS.
 
+### Cost model (fits inside your existing Mistral plan allowance)
+
+Mistral Pro bundles a monthly API-credit allowance (≈ $30/month on the
+current Pro card — confirm the exact figure in your La Plateforme admin
+console; it has changed over time). Anything beyond the allowance is
+billed per token, so the app adds three guardrails:
+
+1. **Cheap-by-default routing**: DM narration and notes default to
+   `mistral-small-latest` ($0.15/$0.60 per M tokens); Large is used only
+   for story generation/shaping. Prompt caching (up to 90% off repeated
+   input) is always on.
+2. **Hard app-level budget cap**: `MISTRAL_MONTHLY_BUDGET_USD` (default
+   25). The app tracks spend in SQLite and, once the cap is reached,
+   automatically fails over to local Ollama for the rest of the month.
+   A hard spend limit should also be set in the La Plateforme console.
+3. **Caching + phase restriction**: model calls only in loading/chapter
+   phases and cached, so replays and retries cost nothing.
+
+Estimate for your usage pattern (one ~4 h session every other week, ~8
+sessions/month, 4 players): story prep + notes + arbitration ≈ 250 K input
++ 80 K output tokens per session on a Small/Large mix ≈ **$2–4/month** —
+comfortably inside the bundled allowance, and the budget cap guarantees
+no surprise overage.
+
 No US-based LLM providers are used anywhere in the chain. STT is local
 Whisper on the host; vision is Mistral Pixtral when online.
 
@@ -175,7 +199,49 @@ Jobs for backend/frontend activate automatically once `backend/` and
 - Security: LAN-only by default, optional access token, no secrets in repo
   (`.env.example` documents everything; `.env` is gitignored).
 
-## 10. Roadmap
+## 11. Security (ironclad by design)
+
+Threat model: the app lives on a home LAN and must never be reachable from
+the internet; API keys and player data must never leave the machine except
+to Mistral's EU endpoints; the host account is protected with MFA/passkeys.
+
+- **Network exposure**: binds to the LAN interface only (never 0.0.0.0 on a
+  WAN-facing host); `ufw`/firewall default-deny inbound, allow only the app
+  port from the LAN subnet; optionally isolate the host on a guest/IoT VLAN.
+  No tunnels, no public ingress, no open ports. HTTPS via a locally trusted
+  cert (mkcert/Caddy) so all traffic on the LAN is encrypted; HSTS on.
+  Remote access, if ever needed, only via WireGuard/Tailscale, not port
+  forwarding.
+- **Authentication**: players join a session with a random 6-digit code +
+  per-session 256-bit token (stored hashed, rotated every session, rate
+  limited). Host/admin actions (start session, end session, email save
+  points, change settings) are gated by **WebAuthn passkey** — no passwords
+  anywhere; register a platform passkey on the host laptop/Pi. Optional
+  `ACCESS_TOKEN` env adds a second factor for admin endpoints.
+- **Secrets**: `MISTRAL_API_KEY`, SMTP credentials, and tokens live only in
+  `.env` (chmod 600) or a systemd `EnvironmentFile` with 0600 perms — never
+  in git, never in logs, never in the DB. CI scans history for secrets
+  (gitleaks) plus the `scripts/check-repo.sh` heuristic check. Use a
+  **dedicated API key** (not your personal one) with a workspace/org spend
+  cap, enable **MFA on the Mistral account**, and rotate the key immediately
+  if it ever appears in a log or commit. Keys are loaded at process start
+  and zeroed on shutdown where the OS allows.
+- **Data at rest**: SQLite DB and all media in `./data/` with directory
+  perms 0700; optional SQLCipher encryption; backups are encrypted
+  (age/gpg) to local disk/USB only — no cloud sync. Raw microphone audio
+  and camera frames are never written to disk: STT runs locally (Whisper)
+  and only transcripts are stored; vision frames go to Mistral Pixtral (EU)
+  only during an explicit vision action, with an on-screen recording
+  indicator, and are discarded after the call. Retention is configurable;
+  session end can purge transcripts.
+- **Supply chain / hygiene**: dependabot for Actions/pip/npm; `unattended-
+  upgrades` on the Pi; CI runs pip-audit, npm audit, bandit, and gitleaks
+  on every PR; minimal dependency footprint.
+- **Audit**: append-only audit log (who joined, who rolled, admin actions,
+  AI calls with token counts) in SQLite, viewable by the passkey-authenticated
+  host.
+
+## 12. Roadmap
 
 | Phase | Deliverable                                                            |
 |-------|------------------------------------------------------------------------|
