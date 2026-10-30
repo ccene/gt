@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 if [ -d backend ]; then
   python3 -m venv .venv
   .venv/bin/pip install --upgrade pip
-  .venv/bin/pip install -r backend/requirements.txt
+  .venv/bin/pip install -r backend/requirements.txt -r backend/requirements-dev.txt
 else
   echo "backend/ not present yet — skipping backend install (see MASTER_PLAN.md phase P1)"
 fi

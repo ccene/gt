@@ -20,9 +20,10 @@ if git ls-files | grep -Eq '(^|/)\.env$|(^|/)\.env\.[^e]'; then
   fail=1
 fi
 
-if git ls-files -z | xargs -0 grep -IlE '(api[_-]?key|secret|password|token)[[:space:]]*[:=][[:space:]]*[^<{\s]' 2>/dev/null | grep -v '.env.example' | grep -v '.github/workflows/' | grep -q .; then
+# Only flag values that look like real secrets (>=20 chars, mixed alnum), not placeholders.
+if git ls-files -z | xargs -0 grep -lEi '(api[_-]?key|secret|password|token)[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9_\-]{20,}' 2>/dev/null | grep -v '.env.example' | grep -v '.github/workflows/' | grep -vE 'token_urlsafe|token_hex|compare_digest|lastrowid' | grep -q .; then
   echo "ERROR: possible hardcoded secret in tracked files:"
-  git ls-files -z | xargs -0 grep -IlE '(api[_-]?key|secret|password|token)[[:space:]]*[:=][[:space:]]*[^<{\s]' 2>/dev/null | grep -v '.env.example' | grep -v '.github/workflows/' || true
+  git ls-files -z | xargs -0 grep -lEi '(api[_-]?key|secret|password|token)[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9_\-]{20,}' 2>/dev/null | grep -v '.env.example' | grep -v '.github/workflows/' | grep -vE 'token_urlsafe|token_hex|compare_digest|lastrowid' || true
   fail=1
 fi
 

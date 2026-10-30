@@ -249,12 +249,12 @@ to Mistral's EU endpoints; the host account is protected with MFA/passkeys.
 | Phase | Deliverable                                                            |
 |-------|------------------------------------------------------------------------|
 | P0    | This plan, repo reset, CI, scripts, templates (this PR)                |
-| P1    | Backend core: models, REST, SQLite, dice, session state machine, tests |
-| P2    | Mobile-first PWA shell: lobby, character submit, table view, PWA setup |
-| P3    | Real-time engine: WebSocket sync, map view, synced dice, Playwright e2e|
-| P4    | AI adapter (Mistral + Ollama) + fallbacks; DM narration; story gen/import|
-| P5    | Audio: TTS narration, mic capture + STT notes; camera vision (optional)|
-| P6    | End-of-session email with updated sheet + save point                   |
-| P7    | Pi deployment hardening, systemd, performance pass, docs               |
+| P1    | ✅ Backend core: SQLite models, REST, dice, session state machine, 36 pytest tests |
+| P2    | ✅ Mobile-first PWA (React+Vite): join/lobby, character submit, table view, Vitest |
+| P3    | ✅ Real-time: WebSocket sync (dice/map/narration/chat), reconnect snapshot, map view |
+| P4    | ✅ AI adapter: Mistral first, Ollama fallback, deterministic fallback, budget cap, cache; story gen/import; demo seed script |
+| P5    | ⬜ Audio: browser TTS narration, mic capture + local Whisper STT; camera vision (Pixtral) |
+| P6    | ✅ End-of-session save-point emails (SMTP or ./outbox/ in dev)       |
+| P7    | ⬜ Pi deployment hardening: systemd unit, firewall, Playwright e2e on mobile viewports |
 
 Each phase lands as its own PR with tests; CI must stay green throughout.
