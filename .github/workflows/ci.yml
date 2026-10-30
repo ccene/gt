@@ -107,5 +107,13 @@ jobs:
           npm ci
           npm install -D @playwright/test
           npx playwright install --with-deps chromium
+      - name: Build PWA + start server
+        run: |
+          npm run build
+          cd ../backend && DATABASE_URL="sqlite:////tmp/e2e.db" nohup python -m uvicorn main:app --host 127.0.0.1 --port 8000 > /tmp/server.log 2>&1 &
+          sleep 4
+          curl -sf http://127.0.0.1:8000/health
       - name: Run e2e
-        run: npm run e2e
+        run: npx playwright test
+        env:
+          E2E_BASE_URL: http://127.0.0.1:8000
