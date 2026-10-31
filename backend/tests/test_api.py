@@ -136,3 +136,10 @@ def test_ai_health(client):
     body = client.get("/api/ai/health").json()
     assert body["budget_usd"] == 25.0
     assert body["mistral_configured"] is False
+
+
+def test_relative_db_path_resolves_to_repo_root(tmp_path, monkeypatch):
+    import config as cfg
+
+    monkeypatch.setattr(cfg.settings, "database_url", "sqlite:///./data/app.db")
+    assert cfg.settings.db_path == (cfg.BASE_DIR / "data" / "app.db").resolve()

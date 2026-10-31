@@ -37,7 +37,12 @@ class Settings(BaseSettings):
     def db_path(self) -> Path:
         url = self.database_url
         if url.startswith("sqlite:///"):
-            return Path(url.removeprefix("sqlite:///"))
+            path = Path(url.removeprefix("sqlite:///"))
+            # Resolve relative sqlite paths against the repo root, not the cwd,
+            # so seed (run from root) and server (run from backend/) share one DB.
+            if not path.is_absolute():
+                path = (BASE_DIR / path).resolve()
+            return path
         return BASE_DIR / "data" / "app.db"
 
     @property
