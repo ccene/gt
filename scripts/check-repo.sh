@@ -10,8 +10,8 @@ require() {
   fi
 }
 
-for f in README.md GETTING_STARTED.md MASTER_PLAN.md .gitignore .env.example \
-         .github/workflows/ci.yml scripts/check-repo.sh; do
+for f in README.md GETTING_STARTED.md MASTER_PLAN.md VIBE.md .gitignore .env.example \
+         .github/workflows/ci.yml scripts/check-repo.sh scripts/smoke_loop.py; do
   require "$f"
 done
 

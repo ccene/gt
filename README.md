@@ -45,6 +45,9 @@ the `dice` event in real time.
 
 ## Development
 
+- **Self-test loop (run this first, no input needed):** `python3 scripts/smoke_loop.py --watch 3` —
+  boots the app on 127.0.0.1 and plays a full session (host → join → dice over WebSocket →
+  narration → chapter → end → save-point email) asserting 20 steps. See [VIBE.md](VIBE.md).
 - Backend tests: `cd backend && pytest`
 - Frontend tests: `cd frontend && npm test`
 - E2E (mobile viewports): `cd frontend && npm run e2e`
