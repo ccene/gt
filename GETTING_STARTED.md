@@ -83,6 +83,22 @@ session), and the session code **DEMO42**, then tap **Join session**.
 On an iPad/iPhone they can tap Share → **Add to Home Screen** to install it
 like an app.
 
+## Step 5b — Host a new game yourself (no API needed)
+
+On the host computer, open `http://localhost:8000` and tap **🎲 Host a new
+game**. A big 6-letter code appears on screen, e.g. **K7XQ2M** — that's your
+session code. Tap **Enter as host →** to go in as the game master (host
+controls unlocked). Shout the code out or send it in your group chat.
+
+**How others join:** each player opens `http://<host-ip>:8000` on their phone,
+enters their name + email + the code, and taps **Join session**. They instantly
+see the table (map, heroes, dice) and everything updates live for everyone.
+
+(Under the hood: "Host a new game" calls `POST /api/sessions` and shows you the
+returned `code`; "Join session" calls `POST /api/sessions/join` with that code,
+then opens a WebSocket so all devices stay in sync. The demo in step 3 just
+pre-creates one of these for you with code DEMO42.)
+
 ## Step 6 — Play the demo
 
 | What | How |
@@ -104,16 +120,12 @@ sign-in).
 ## Step 7 — Run a real session (no demo data)
 
 1. Host runs the server (`./scripts/run.sh`) **without** seeding demo data.
-2. Host creates a session — the API does this when you use the app flow; the
-   6-letter code appears on screen (share it out loud / on a group chat).
+2. Host opens the app and taps **Host a new game** → share the big code.
 3. Players join with the code and submit their character sheets.
 4. Play. At the end, tap **End session** to email everyone their save point.
 
-To create a session from the API directly:
-
-```
-POST http://<host-ip>:8000/api/sessions        {}        -> returns {"code": "ABC123", "admin_token": "..."}
-```
+(API equivalent, if you prefer: `POST http://<host-ip>:8000/api/sessions` with
+body `{}` returns `{"code": "ABC123", "admin_token": "…"}`.)
 
 ## Troubleshooting
 

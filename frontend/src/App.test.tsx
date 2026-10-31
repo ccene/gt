@@ -18,6 +18,25 @@ describe("App", () => {
     render(<App />);
     expect(screen.getByText(/Join your game session/i)).toBeInTheDocument();
     expect(screen.getByPlaceholderText("ABC123")).toBeInTheDocument();
+    expect(screen.getByText(/Host a new game/i)).toBeInTheDocument();
+  });
+
+  it("host button creates a session and shows the big code", async () => {
+    const { userEvent } = await import("@testing-library/user-event");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => ({
+        ok: true,
+        json: async () =>
+          url.includes("/api/sessions") && !url.includes("join")
+            ? { id: 5, code: "K7XQ2M", admin_token: "tok", state: "lobby", chapter_index: 0, save_point: {}, clients: 0 }
+            : { session_id: 5, snapshot: { session: { id: 5, code: "K7XQ2M", state: "lobby", chapter_index: 0, save_point: {} }, characters: [], maps: [], events: [], clients: 1 } },
+      }))
+    );
+    render(<App />);
+    await userEvent.click(screen.getByText(/Host a new game/i));
+    expect(await screen.findByTestId("host-code")).toBeInTheDocument();
+    expect(screen.getByText("K7XQ2M")).toBeInTheDocument();
   });
 
   it("shows table view with dice after snapshot", async () => {
