@@ -39,7 +39,12 @@ def _session_public(row: dict) -> dict:
 
 
 def _check_admin(session: dict, x_admin_token: str | None) -> None:
-    if x_admin_token and secrets.compare_digest(x_admin_token, session["admin_token"]):
+    import passkeys
+
+    if x_admin_token and (
+        secrets.compare_digest(x_admin_token, session["admin_token"])
+        or passkeys.is_valid_admin_session(x_admin_token)
+    ):
         return
     raise HTTPException(403, "invalid admin token")
 
@@ -332,6 +337,45 @@ async def vision(session_id: int, payload: dict, x_admin_token: str | None = Hea
     result = await vision.describe_image(image_bytes, str(payload.get("prompt", "")))
     await hub.log_event(session_id, "vision", result)
     return result
+
+
+# --- WebAuthn passkey (host admin) ---
+
+@api.post("/auth/passkey/register/options")
+def passkey_register_options(origin: str | None = Header(default=None)):
+    import passkeys
+
+    origin = origin or "http://localhost:8000"
+    return passkeys.registration_options(origin)
+
+
+@api.post("/auth/passkey/register/verify")
+def passkey_register_verify(payload: dict, origin: str | None = Header(default=None)):
+    import passkeys
+
+    try:
+        return passkeys.verify_registration(origin or "http://localhost:8000", payload.get("credential", {}))
+    except (ValueError, KeyError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@api.post("/auth/passkey/login/options")
+def passkey_login_options(origin: str | None = Header(default=None)):
+    import passkeys
+
+    return passkeys.authentication_options(origin or "http://localhost:8000")
+
+
+@api.post("/auth/passkey/login/verify")
+def passkey_login_verify(payload: dict, origin: str | None = Header(default=None)):
+    import passkeys
+
+    try:
+        token = passkeys.verify_authentication(origin or "http://localhost:8000", payload.get("credential", {}))
+    except (ValueError, KeyError) as exc:
+        raise HTTPException(401, str(exc)) from exc
+    _audit(None, "host-passkey", "auth.passkey", {"token_issued": True})
+    return {"admin_session_token": token}
 
 
 # --- websocket ---

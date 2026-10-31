@@ -36,6 +36,7 @@ export interface AppState {
   }) => void;
   pushEvent: (kind: string, payload: unknown) => void;
   setConnected: (v: boolean) => void;
+  setAdminToken: (t: string) => void;
   reset: () => void;
 }
 
@@ -104,5 +105,6 @@ export const useApp = create<AppState>((set: (p: Partial<AppState> | ((s: AppSta
       return st;
     }),
   setConnected: (v: boolean) => set({ connected: v }),
+  setAdminToken: (t: string) => set({ adminToken: t }),
   reset: () => set(initial),
 }));

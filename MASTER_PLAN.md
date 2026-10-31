@@ -216,11 +216,13 @@ to Mistral's EU endpoints; the host account is protected with MFA/passkeys.
   Remote access, if ever needed, only via WireGuard/Tailscale, not port
   forwarding.
 - **Authentication**: players join a session with a random 6-digit code +
-  per-session 256-bit token (stored hashed, rotated every session, rate
-  limited). Host/admin actions (start session, end session, email save
-  points, change settings) are gated by **WebAuthn passkey** — no passwords
-  anywhere; register a platform passkey on the host laptop/Pi. Optional
-  `ACCESS_TOKEN` env adds a second factor for admin endpoints.
+  per-session 256-bit token (rate limited). Host/admin actions (start/end
+  session, chapters, maps, vision, email save points) are gated by
+  **WebAuthn passkey** — implemented: `POST /api/auth/passkey/register|login`
+  (webauthn lib, single-use 5-min challenges, credentials + sign counters in
+  SQLite, 12 h admin session token issued on success). The per-session admin
+  token still works as a fallback. No passwords anywhere. Optional
+  `ACCESS_TOKEN` env adds a second factor.
 - **Secrets**: `MISTRAL_API_KEY`, SMTP credentials, and tokens live only in
   `.env` (chmod 600) or a systemd `EnvironmentFile` with 0600 perms — never
   in git, never in logs, never in the DB. CI scans history for secrets

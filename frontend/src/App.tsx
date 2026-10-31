@@ -3,6 +3,7 @@ import { api } from "./api";
 import { useApp } from "./store";
 import { connectWs, wsSend } from "./ws";
 import AudioPanel, { VisionButton } from "./AudioPanel";
+import PasskeyPanel from "./PasskeyPanel";
 import "./styles.css";
 
 const FACES = [4, 6, 8, 10, 12, 20, 100];
@@ -236,6 +237,7 @@ export default function App() {
         <span className="title small">⚔️ D&amp;D Table</span>
         <span className="code-badge">code {useApp.getState().code}</span>
       </header>
+      <PasskeyPanel />
       {state === "lobby" && <CharacterForm />}
       <TableView />
       <DicePad />

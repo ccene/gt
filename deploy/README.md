@@ -10,7 +10,7 @@
 
 **Security notes**
 - LAN-only by design: no public ports, no tunnels. Remote access only via WireGuard, never port forwarding.
-- Admin actions are gated by the per-session admin token (plan §10 adds WebAuthn passkey for host login).
+- Admin actions are gated by a **WebAuthn passkey** (register/sign-in in the PWA host panel); the per-session admin token remains as fallback.
 - Mistral API key lives only in `.env` (0600) and is used with a dedicated key + spend cap + MFA on the Mistral account.
 - Mic audio is transcribed by local Whisper; raw audio is never stored. Camera frames go to Pixtral (EU) only on explicit host action.
 - Backups: copy `data/` with `cp` to local disk/USB, encrypted with `age` or `gpg` — never to cloud sync.
