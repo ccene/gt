@@ -14,6 +14,20 @@ function JoinScreen() {
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [hosted, setHosted] = useState<{ code: string; admin_token?: string } | null>(null);
+
+  const hostNew = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const s = await api.createSession(null);
+      setHosted({ code: s.code, admin_token: s.admin_token });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const join = async () => {
     setBusy(true);
@@ -56,6 +70,25 @@ function JoinScreen() {
       <button className="primary" disabled={busy || !code || !name} onClick={join}>
         {busy ? "Joining…" : "Join session"}
       </button>
+      <div className="divider"><span>or</span></div>
+      <button className="host-btn" disabled={busy} onClick={hostNew}>
+        🎲 Host a new game
+      </button>
+      {hosted && (
+        <div className="host-code" data-testid="host-code">
+          <p className="muted">Share this code with your players:</p>
+          <div className="big-code">{hosted.code}</div>
+          <button
+            className="primary"
+            onClick={() => {
+              useApp.getState().setAdminToken(hosted.admin_token ?? "");
+              void api.joinSession(hosted.code).then((j) => useApp.getState().setSnapshot(j.snapshot));
+            }}
+          >
+            Enter as host →
+          </button>
+        </div>
+      )}
     </div>
   );
 }
