@@ -1,176 +1,152 @@
-# Getting Started — D&D Table Companion (plain-English guide)
+# Getting Started — D&D Table Companion
 
-This app turns one laptop or Raspberry Pi into the "game master screen" for your
-table. Everyone else opens a web page on their phone. No app store, no accounts,
-no passwords — just a code.
-
-**What you need**
-- One computer to host: a laptop, or a Raspberry Pi 4 (4 GB+) with Raspberry Pi OS.
-- Phones/tablets for each player, on the **same Wi-Fi** as the host.
-- Optional: a Mistral API key (if you want the smart AI narrator; everything
-  works without it using the built-in local fallback).
+Turn one laptop or Raspberry Pi into the game-master screen for your table.
+Everyone else plays from a phone browser — no app store, no accounts, no
+passwords. You share one 6-character code and you're playing.
 
 ---
 
-## Step 1 — Get the code onto the host computer
+## 1. What you need
 
-On the host computer, open a terminal and run:
+- **One host computer**: a laptop, or a Raspberry Pi 4 (4 GB+) with Raspberry Pi OS.
+  It needs Python 3.11+ and Node 20+.
+- **A phone or tablet per player**, on the **same Wi-Fi** as the host computer.
+- **Optional — a Mistral API key** (`MISTRAL_API_KEY` in `.env`) for the smart AI
+  storyteller/narrator. Without it everything still works on a built-in local
+  fallback, so you can play fully offline.
+
+## 2. One-time setup on the host computer
 
 ```bash
-git clone https://github.com/ccene/gt.git
+git clone https://github.com/ccene/gt.git   # or: cd into your existing copy && git pull
 cd gt
+./scripts/setup.sh                          # creates .venv, installs backend deps, builds the phone web app
 ```
 
-(If you already have it, just `cd` into the folder and run
-`git pull` to get the latest.)
-
-## Step 2 — Install everything (one time only)
-
-```bash
-./scripts/setup.sh
-```
-
-This creates a private Python environment (`.venv`), installs the backend
-dependencies, and builds the phone web app into `frontend/dist`.
 Takes a few minutes the first time.
 
-**Optional — turn on the AI narrator:** copy `.env.example` to `.env`
-(`cp .env.example .env`), then put your Mistral API key on the
-`MISTRAL_API_KEY=` line. Without it, narration uses a built-in local fallback,
-so the demo still works fully offline.
+**Optional:** the repo already has a `.env` (gitignored) with your keys. To edit
+it: `nano .env`. Useful knobs:
 
-## Step 3 — Load the demo data (optional but recommended first time)
+| Variable | What it does |
+|---|---|
+| `MISTRAL_API_KEY` | Enables the AI storyteller (Mistral, EU servers only). Empty = local fallback |
+| `MISTRAL_MONTHLY_BUDGET_USD` | Hard monthly spend cap (default $25); the app auto-falls-back to local when hit |
+| `ACCESS_TOKEN` | Optional shared LAN password. When set, hosting/story-generation/passkey-setup require it (header `X-Access-Token`) |
+| `SMTP_HOST` / `SMTP_*` | Where save-point emails go. Empty = written as files to `outbox/` instead |
+| `HOST` / `PORT` | Bind address (default `0.0.0.0:8000`) |
 
-```bash
-python3 scripts/seed_demo.py
-```
-
-(If you see `ModuleNotFoundError: No module named 'httpx'`, you skipped step 2 —
-run `./scripts/setup.sh` first. The script also auto-uses `.venv` when present.)
-
-This creates a pretend game already in progress:
-- Session code: **DEMO42**
-- Four pretend players: **Aria, Bram, Cleo, Dana** (with character sheets)
-- A story: *The Sunken Crypt of Morvaine* (3 chapters)
-- 3 maps and a few dice rolls / narration already on the table
-
-## Step 4 — Start the server
+## 3. Start the server
 
 ```bash
 ./scripts/run.sh
 ```
 
-You'll see a line like:
-
 ```
 Serving on http://0.0.0.0:8000 — open the LAN IP on each player's device
 ```
 
-Find the host computer's local IP address (on Linux/macOS: `hostname -I`;
-on the Pi desktop: hover the Wi-Fi icon). It looks like `192.168.1.50`.
+Find the host's local IP: `hostname -I` (Linux) or the Wi-Fi icon (Pi desktop) —
+it looks like `192.168.1.50`. **Everyone must be on the same Wi-Fi.** If the port
+is blocked, `sudo scripts/harden-host.sh` installs a default-deny firewall that
+opens port 8000 to your LAN only.
 
-## Step 5 — Players join from their phones
+Sanity check: open `http://localhost:8000` on the host — you should see the
+join screen. `http://localhost:8000/health` returns `{"status":"ok"}`.
 
-Each player opens a browser (Safari on iPad works great) and goes to:
+## 4. Play with friends — two ways
 
+### Option A — Instant demo (recommended the first time)
+
+```bash
+python3 scripts/seed_demo.py     # safe to re-run any time; resets the demo
+./scripts/run.sh
 ```
-http://192.168.1.50:8000     <- use YOUR host computer's IP
-```
 
-They type their name, their email (used to send their character sheet after the
-session), and the session code **DEMO42**, then tap **Join session**.
+Then everyone (including you) opens `http://192.168.1.50:8000` — **your** host IP —
+and joins with code **DEMO42**. You get 4 pre-made heroes (Aria, Bram, Cleo,
+Dana), a 3-chapter story (*The Sunken Crypt of Morvaine*), maps, and a running
+1-hour campaign clock. On iPhone/iPad, Share → **Add to Home Screen** installs
+it like an app.
 
-On an iPad/iPhone they can tap Share → **Add to Home Screen** to install it
-like an app.
+### Option B — Your own game (the normal way)
 
-## Step 5b — Host a new game yourself (no API needed)
+1. On the host computer open `http://localhost:8000`.
+2. Type a **story idea** — one sentence is enough, e.g.
+   *"a crew of sky-pirates raids a cloud castle at dawn"*.
+3. Pick the **campaign length** — default **1 hour** (you can extend it later
+   mid-game with **+30 min** / **+1 hour**), plus a genre and tone.
+4. Tap **✨ Generate story & host**. The AI turns your idea into a campaign —
+   title, logline, opening scene, NPCs, and chapters (~20 min of play each, so
+   1 hour = 3 chapters).
+5. A big 6-letter code appears (e.g. **K7XQ2M**). Tap **Enter as host →**.
+   Shout the code or send it in your group chat.
 
-On the host computer, open `http://localhost:8000` and:
+   (No idea right now? Tap **🎲 Quick host (no story)**.)
 
-1. Type a **story idea** (e.g. "a crew of sky-pirates raids a cloud castle"),
-   pick the **campaign length** (default **1 hour**, options up to 4 hours) plus
-   a genre and tone, and tap **✨ Generate story & host**. The LLM turns your
-   idea into a campaign (title, logline, chapters, NPCs — about 20 minutes of
-   play per chapter, so 1 hour = 3 chapters), and the session is created with
-   that story attached.
-2. A big 6-letter code appears on screen, e.g. **K7XQ2M** — that's your
-   session code. Tap **Enter as host →** to go in as the game master (host
-   controls unlocked). Shout the code out or send it in your group chat.
+6. Each player opens `http://<host-ip>:8000` on their phone, enters their
+   **name**, **email** (for their end-of-session save point), and the **code**,
+   then taps **Join session**. In the lobby they fill in their character
+   (name, HP, class, level). Everyone sees the same table live from then on.
+7. The host taps **Start session** — the campaign clock starts counting down.
 
-(No story idea handy? Tap **🎲 Quick host (no story)** to start immediately.)
-
-Once play starts, the **⏳ Campaign** bar counts down the session (1 hour by
-default). If the table wants more, the host taps **+30 min** or **+1 hour** to
-extend it mid-session.
-
-**How others join:** each player opens `http://<host-ip>:8000` on their phone,
-enters their name + email + the code, and taps **Join session**. They instantly
-see the table (story, campaign timer, map, heroes, combat tracker, dice, chat)
-and everything updates live for everyone.
-
-(Under the hood: "Generate story & host" calls `POST /api/stories/generate`
-with your idea and length, then `POST /api/sessions` with the new `story_id`
-and `campaign_minutes`; "Join session" calls `POST /api/sessions/join` with
-the code, then opens a WebSocket so all devices stay in sync. The demo in
-step 3 just pre-creates one of these for you with code DEMO42.)
-
-## Step 6 — Play the demo
+## 5. What you can do during a session
 
 | What | How |
 |---|---|
-| Roll dice | Tap any die (d4…d100) in the Dice panel — everyone sees the result instantly. Use **Advantage / Disadvantage** for d20 rolls (rolls twice, keeps high/low) |
-| Run combat | Host taps **Start combat** in the ⚔️ Combat panel → **Roll initiative** sorts everyone → **Next turn** walks the order (round counter included). Anyone can tap −/+ to apply damage/healing, and tap condition chips (poisoned, prone, concentrating…) to toggle them. Host can add enemies mid-fight |
-| Track hero HP | The Heroes list has −/+ buttons; conditions show as chips. Updates are live for everyone |
-| Talk at the table | The 💬 Table chat panel — messages appear on every device instantly |
-| Catch up | Host taps **📜 Recap so far (AI)** — the AI summarizes what happened so far for anyone who lost the thread |
-| See the map | The Table panel shows the current map with markers |
-| See the story | The 📖 panel shows the generated campaign: logline, opening scene, and the chapter list with the current chapter highlighted |
-| Hear narration | Host taps **Narrate scene** (AI writes the scene), then any player taps **Read narration aloud** (the phone speaks it) |
-| Listen to the table | Host taps **Record table talk** — speech is transcribed **locally** (nothing leaves the device except text notes) |
-| Read the table with the camera | Host taps **Capture table & describe** — one photo goes to Mistral's EU servers, description comes back |
-| Next chapter | Host taps **Next chapter** (screen shows a loading state, like a video game) |
-| Extend the session | Host taps **+30 min** / **+1 hour** in the campaign bar |
-| End the session | Host taps **End session** — every player with an email gets their updated character sheet + save point (in the demo these land as files in `outbox/`) |
-| Host login | The **Host passkey** panel: register a passkey once, then sign in with it (Face ID / Touch ID / PIN) instead of any token |
+| 📖 Follow the story | The story panel shows the campaign title, logline, opening scene and the chapter list with the current chapter highlighted |
+| ⏳ Watch the clock | The campaign bar counts down (1 h default); host taps **+30 min** / **+1 hour** to extend |
+| 🎲 Roll dice | Tap any die (d4…d100) — everyone sees it instantly. **Advantage/Disadvantage** on d20 rolls twice and keeps high/low |
+| ⚔️ Run combat | Host: **Start combat** → **Roll initiative** (sorts everyone) → **Next turn** walks the order with a round counter. Anyone taps **−/+** for damage/heal and condition chips (poisoned, prone, concentrating…) to toggle them. Host can **add enemies mid-fight** |
+| 🛡️ Track heroes | Heroes list shows HP with **−/+** buttons and condition chips, live for everyone |
+| 💬 Talk | Table chat — messages appear on every device instantly, attributed to the player who sent them |
+| 📜 Catch up | Host: **📜 Recap so far (AI)** — summarizes what happened for anyone who lost the thread |
+| 🗺️ Show the map | Table panel shows the current map with markers |
+| 🎙️ Narrate out loud | Host writes a scene (or taps **Narrate scene (AI)**), any player taps **Read narration aloud** and their phone speaks it |
+| 🎤 Listen to the table | Host: **Record table talk** — transcribed **locally** on the host (Whisper); audio is never stored, only the text |
+| 📷 Describe the table | Host: **Capture table & describe** — one photo goes to Mistral's EU vision model on this explicit tap only |
+| ⏭️ Next chapter | Host: **Next chapter** (screen goes to a loading state, like a video game) |
+| 🏁 End the session | Host: **End session** — every player with an email gets their updated character sheet + save point (with no SMTP configured, they land as files in `outbox/`) |
+| 🔑 Host login | **Host passkey** panel: register a passkey once (Face ID/Touch ID/PIN), then sign in with it instead of the admin token |
 
-**Demo host credentials:** session code `DEMO42`, admin token
-`demo-admin-token` (only needed for API calls; in the app the host controls
-appear automatically after joining a session you created, or after passkey
-sign-in).
+## 6. Game-night checklist for the host
 
-## Step 7 — Run a real session (no demo data)
+1. `./scripts/run.sh` is running; you can open `http://localhost:8000`.
+2. You hosted a game (story generated or quick host) and have the code.
+3. Players are on the same Wi-Fi and joined with the code.
+4. You tapped **Start session** (campaign clock running).
+5. Playing? Combat tracker for fights, dice for rolls, chat for table talk,
+   **Recap** when someone asks "wait, what happened?", **+30 min** when the
+   night is going well.
+6. Done? **End session** — save points are emailed (or dropped in `outbox/`).
 
-1. Host runs the server (`./scripts/run.sh`) **without** seeding demo data.
-2. Host opens the app and taps **Host a new game** → share the big code.
-3. Players join with the code and submit their character sheets.
-4. Play. At the end, tap **End session** to email everyone their save point.
-
-(API equivalent, if you prefer: `POST http://<host-ip>:8000/api/sessions` with
-body `{}` returns `{"code": "ABC123", "admin_token": "…"}`.)
-
-## Troubleshooting
+## 7. Troubleshooting
 
 | Problem | Fix |
 |---|---|
-| `./scripts/setup.sh` fails | Make sure Python 3.11+ (`python3 --version`) and Node 20+ (`node --version`) are installed |
-| Players can't connect | Host and phones must be on the same Wi-Fi; check the host's firewall allows port 8000 (`sudo scripts/harden-host.sh` sets this up) |
-| "Transcription failed (503)" | The local speech model isn't installed; that's fine — it's optional. `pip install faster-whisper` inside `.venv` enables it |
-| Narration says "local fallback" | No `MISTRAL_API_KEY` in `.env`, or the monthly budget cap was hit — add the key, or just enjoy the fallback |
-| Want to wipe demo data | Delete the `data/` and `outbox/` folders, then re-run `python3 scripts/seed_demo.py` |
+| `./scripts/setup.sh` fails | Check `python3 --version` (3.11+) and `node --version` (20+) |
+| Players can't connect | Same Wi-Fi on both; `hostname -I` for the right IP; firewall: `sudo scripts/harden-host.sh` |
+| "Transcription failed (503)" | Optional local speech model missing — `.venv/bin/pip install faster-whisper` enables it |
+| Narration says "local fallback" | No `MISTRAL_API_KEY` in `.env`, or the monthly budget cap was reached — add the key or enjoy the fallback |
+| Session code rejected (404) | Codes are case-insensitive but exact — 6 chars; check for a typo |
+| Want to wipe everything | Stop the server, delete `data/` and `outbox/`, then `python3 scripts/seed_demo.py` for a fresh demo |
+| Re-run the self-test | `python3 scripts/smoke_loop.py --watch 3` — boots the app headlessly and plays a full session, 37 assertions |
 
-## What runs where (the 30-second version)
+## 8. What runs where (the 30-second version)
 
-- The **host computer** runs everything: the game server, the database (a
-  single file in `data/`), and the phone web pages.
-- **Phones** only display and send taps/rolls — all dice are rolled on the
-  host so nobody can cheat the RNG.
-- **AI**: if you set a Mistral key, story/narration goes to Mistral's EU
-  servers (never US providers); otherwise a local model (Ollama) or a built-in
-  fallback handles it. Speech-to-text is always local. Your monthly spend is
-  capped by `MISTRAL_MONTHLY_BUDGET_USD` (default $25) and the app switches to
-  the free local fallback if the cap is hit.
-- **Security**: LAN-only, default-deny firewall, passkey host login, no raw
-  audio/photos stored, secrets only in `.env` (never committed).
+- The **host computer** runs everything: the game server, the SQLite database
+  (one file in `data/`), and serves the phone web pages.
+- **Phones** are thin views — all dice are rolled on the host (server-side
+  RNG), and the real-time channel is a WebSocket authenticated with the token
+  each player got when joining.
+- **AI**: with a Mistral key, story generation/narration/vision go to
+  Mistral's **EU** endpoints only (no US LLM providers); otherwise local Ollama
+  or the built-in fallback. Speech-to-text is always local, audio never hits
+  disk. Monthly spend is capped by `MISTRAL_MONTHLY_BUDGET_USD`.
+- **Privacy/security**: LAN-only + default-deny firewall, passkey host login,
+  snapshots scoped to session members, no raw audio/photos stored, secrets
+  only in `.env` (never committed; CI scans for them).
 
-See [MASTER_PLAN.md](MASTER_PLAN.md) for the full architecture and
-[deploy/README.md](deploy/README.md) for running it 24/7 on a Raspberry Pi.
+See [README.md](README.md) for the quick API tour, [MASTER_PLAN.md](MASTER_PLAN.md)
+for the full architecture, and [deploy/README.md](deploy/README.md) for running
+it 24/7 on a Raspberry Pi with systemd.

@@ -13,16 +13,23 @@ strategy, CI, and roadmap.
 
 ## Quick start
 
+👉 **New here? [GETTING_STARTED.md](GETTING_STARTED.md) walks you through playing
+with friends step by step — start there.**
+
 ```bash
 ./scripts/setup.sh        # install backend deps + build frontend PWA
-python3 scripts/seed_demo.py   # optional: load mock demo data (code DEMO42)
 ./scripts/run.sh          # serve API + PWA on http://0.0.0.0:8000
 ```
 
-Open the printed LAN URL on each player's device. Demo: join with session code
-**DEMO42**; 4 mock players (Aria, Bram, Cleo, Dana), a 3-chapter story, 3 maps,
-and pre-seeded dice/narration events are included. Host admin token for the demo:
-`demo-admin-token` (start/end session, next chapter, set map, AI narration).
+On the host, open `http://localhost:8000`, type a story idea, pick a campaign
+length (default **1 hour**, extendable mid-game), and tap
+**✨ Generate story & host** — the LLM writes the campaign and you get a 6-char
+code to share. Players open `http://<host-ip>:8000` on their phones and join
+with the code. Or skip the story: **🎲 Quick host**.
+
+Want to try it instantly instead? `python3 scripts/seed_demo.py` loads a ready
+session (code **DEMO42**, 4 mock players, a 3-chapter story, maps, pre-seeded
+events, running 1-hour campaign clock; admin token `demo-admin-token`).
 
 The AI adapter uses Mistral first (set `MISTRAL_API_KEY` in `.env`) and falls
 back to local Ollama, then to a deterministic local narration — the demo works
@@ -32,17 +39,23 @@ fully offline.
 
 ```bash
 GET  /health
-POST /api/sessions/join      {"code":"DEMO42"}
-POST /api/sessions/1/roll    {"count":1,"faces":20,"modifier":3,"roller":"Aria"}
+POST /api/stories/generate   {"prompt":"goblins stole the village bell","length_hours":1}
+POST /api/sessions           {"story_id":<id>,"campaign_minutes":60}   # -> {"code":"ABC123","admin_token":"..."}
+POST /api/sessions/join      {"code":"ABC123","player_id":1}           # -> player_token + snapshot
+POST /api/sessions/1/roll    {"count":1,"faces":20,"modifier":3,"mode":"adv","roller":"Aria"}
+POST /api/sessions/1/combat  {"combatants":[{"name":"Goblin","hp":7,"is_enemy":true}]}  header X-Admin-Token
+POST /api/sessions/1/combat/roll    # roll initiative, sorted        header X-Admin-Token
+POST /api/sessions/1/campaign/extend {"minutes":30}                     # extend the 1h default
+POST /api/sessions/1/chat    {"text":"I sneak ahead"}                   header X-Player-Token
 POST /api/sessions/1/narrate {"scene":"The party enters the crypt"}
-POST /api/sessions/1/state   {"state":"ended"}  header X-Admin-Token: demo-admin-token
+POST /api/sessions/1/state   {"state":"ended"}                          header X-Admin-Token
 # ended session writes save-point emails to ./outbox/
 ```
 
 WebSocket live channel: `ws://<host>:8000/api/sessions/1/ws?token=<player_token>`
 (the token from `POST /api/sessions/join`) — send `{"type":"roll","faces":20}`
-and every connected client receives the `dice` event in real time, with the
-roller attributed from the token.
+or `{"type":"chat","text":"hi"}` and every connected client receives the event
+in real time, with the sender attributed from the token.
 
 ## Development
 
