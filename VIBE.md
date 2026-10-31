@@ -39,14 +39,23 @@ All master-plan phases P1–P7 are merged (PRs #9–#12):
 
 | Area | Where | What |
 |---|---|---|
-| Backend core | `backend/` (FastAPI + Uvicorn + SQLite) | REST API (`routers.py`), dice RNG (`dice.py`), session state machine `lobby→loading→playing→chapter_end→ended`, WebSocket hub (`hub.py`), passkey host admin (`passkeys.py`), 44 pytest tests (`backend/tests/`) |
-| AI adapter | `backend/ai.py` | Mistral-first chain → Ollama → deterministic local fallback; SQLite-cached; `MISTRAL_MONTHLY_BUDGET_USD` hard cap with failover |
+| Backend core | `backend/` (FastAPI + Uvicorn + SQLite) | REST API (`routers.py`), dice RNG with advantage/disadvantage (`dice.py`), session state machine `lobby→loading→playing→chapter_end→ended`, WebSocket hub (`hub.py`), passkey host admin (`passkeys.py`), 70 pytest tests (`backend/tests/`) |
+| AI adapter | `backend/ai.py` | Mistral-first chain → Ollama → deterministic local fallback; SQLite-cached; `MISTRAL_MONTHLY_BUDGET_USD` hard cap with failover. `generate_campaign(prompt, length_hours)` turns the host's free-text idea into a structured campaign (title/logline/chapters/NPCs, ~20 min per chapter); `recap_session` summarizes the session log |
+| Campaign & story | `routers.py`, `db.py` | `POST /api/stories/generate {prompt, length_hours}` (default **1 hour** → 3 chapters); sessions carry `campaign_minutes` (default 60), the clock starts when state becomes `playing`, and the host can `POST /sessions/{id}/campaign/extend {minutes}` (+30/+60) mid-game |
+| Combat tracker | `routers.py`, `hub.py` | Initiative tracker (`combatants` + `combat_state` tables): start encounter (admin), roll initiative (d20+mod, sorted), next turn (round counter), HP delta/clamp + condition toggles (anyone), end. Broadcast over WS and included in snapshots |
+| Live sheets & chat | `routers.py` | `POST /sessions/{id}/characters/{cid}/update` (HP/conditions merge-patch, broadcast); `POST /sessions/{id}/chat` (REST fallback for WS chat); `POST /sessions/{id}/recap` (AI "what happened so far") |
 | Audio/vision | `backend/audio.py`, `backend/vision.py` | Local Whisper STT (audio never written to disk), Pixtral vision on explicit host action |
 | Email | `backend/emailer.py` | End-of-session save points; SMTP or `./outbox/` in dev |
-| Frontend PWA | `frontend/` (React 19 + Vite + TS) | Join/host screen (`🎲 Host a new game` → big shareable code), character form, table view (map/markers/heroes), dice pad, host controls, passkey panel; 12 Vitest tests + 2 Playwright e2e (iPhone/iPad viewports) |
+| Frontend PWA | `frontend/` (React 19 + Vite + TS) | Join/host screen with **story-idea input + campaign length + "Generate story & host"** (LLM campaign → session code), story panel, campaign timer bar with extend buttons, combat panel, table chat, dice pad with adv/dis, heroes with HP ±/conditions; 16 Vitest tests + 5 Playwright e2e (iPhone/iPad viewports) |
 | Demo | `scripts/seed_demo.py` | Session `DEMO42`, admin token `demo-admin-token`, 4 players, 3-chapter story, 3 maps, seeded events |
-| Ops | `scripts/{setup,run}.sh`, `deploy/`, `scripts/harden-host.sh` | `.venv` setup, one-command run on `0.0.0.0:8000`, systemd unit, default-deny firewall |
+| Ops | `scripts/{setup,run}.sh`, `deploy/`, `scripts/harden-host.sh` | `.venv` setup, one-command run on `0.0.0.0:8000` (venv resolved by absolute path), systemd unit, default-deny firewall |
 | CI | `.github/workflows/ci.yml` | Repo hygiene + gitleaks, backend (ruff/mypy/pytest cov≥80), frontend (eslint/tsc/vitest/build), Playwright e2e — all green on main |
+
+Known bug fixed after main @ d70cba1: `frontend/src/api.ts` `req()` spread `...init`
+after `headers`, so callers passing `headers: undefined` (e.g. `createSession`) wiped
+`Content-Type: application/json` and every PWA POST got a 422 in the real browser
+(the API-level smoke loop used httpx with explicit headers, so it missed this).
+Headers are now merged: `{ "Content-Type": "application/json", ...init?.headers }`.
 
 Docs: `README.md` (quick start), `GETTING_STARTED.md` (plain-English guide),
 `MASTER_PLAN.md` (full architecture/security/roadmap), `deploy/README.md`.
@@ -68,24 +77,33 @@ python3 scripts/smoke_loop.py --watch 3 # three consecutive passes
 
 1. Starts Uvicorn on `127.0.0.1:8123` with a throwaway DB (`DATABASE_URL` override).
 2. `GET /health` → ok.
-3. `POST /api/sessions` → new game, 6-char code (the "Host a new game" flow).
-4. `POST /api/players` + character sheet → submit.
-5. `POST /api/sessions/join` with the code → snapshot containing the character.
-6. Join with a **bad** code → 404.
-7. Admin token starts the session (`state=playing`).
-8. **Two WebSocket clients** connect; one sends a `roll`; both receive the
-   same `dice` event in real time; `ping`→`pong` reports `clients: 2`.
-9. REST roll `2d6+3` shape/bounds.
-10. `POST /narrate` → narration text from any provider (Mistral key from
-    `.env`, else Ollama, else local fallback — all acceptable).
-11. `POST /notes` → transcript summarization.
-12. `POST /chapter` (admin) → `chapter_index` 1, `state=loading`.
-13. `POST /maps` (admin) → map set.
-14. `POST /state {state:"ended"}` (admin) → **save-point email appears in
+3. `POST /api/stories/generate {prompt, length_hours: 1}` → the LLM turns the
+   host's story input into a 3-chapter campaign (any provider, incl. fallback).
+4. `POST /api/sessions {story_id, campaign_minutes: 60}` → new game, 6-char
+   code, 60-minute campaign (the "Generate story & host" flow).
+5. `POST /api/players` + character sheet → submit.
+6. `POST /api/sessions/join` with the code → snapshot containing the character,
+   the campaign clock, the story, and the (inactive) combat tracker.
+7. Join with a **bad** code → 404.
+8. Admin token starts the session (`state=playing`) → campaign clock starts
+   (`started_at`/`ends_at` = +60 min).
+9. `POST /campaign/extend` without token → 403; with token `+30` → 90 min total.
+10. **Two WebSocket clients** connect; one sends a `roll`; both receive the
+    same `dice` event in real time; `ping`→`pong` reports `clients: 2`.
+11. REST roll `2d6+3` shape/bounds; `mode:"adv"` keeps the higher of 2d20.
+12. Combat: start encounter (admin) → roll initiative (sorted desc) → next turn
+    → HP delta + `poisoned` condition → end.
+13. `POST /chat` (REST) and `POST /characters/{id}/update` (HP + conditions).
+14. `POST /recap` → AI "what happened so far"; `POST /narrate` → narration text
+    from any provider (Mistral key from `.env`, else Ollama, else local
+    fallback — all acceptable); `POST /notes` → transcript summarization.
+15. `POST /chapter` (admin) → `chapter_index` 1, `state=loading`.
+16. `POST /maps` (admin) → map set.
+17. `POST /state {state:"ended"}` (admin) → **save-point email appears in
     `outbox/`** containing the character name and save point.
-15. Admin action **without** token → 403.
+18. Admin action **without** token → 403.
 
-20 assertions per pass, PASS/FAIL printed per step, exit code 0 only if all
+34 assertions per pass, PASS/FAIL printed per step, exit code 0 only if all
 pass. Verified locally: `--watch 3` → all 3 passes green.
 
 ### When you change code, iterate like this
@@ -146,7 +164,20 @@ python3 scripts/seed_demo.py    # optional demo data (code DEMO42)
 python3 scripts/smoke_loop.py --watch 3   # <-- the self-iterating proof loop
 ```
 
-Key endpoints: `GET /health` · `POST /api/sessions` (host) ·
-`POST /api/sessions/join {code}` · `POST /api/sessions/{id}/roll|narrate|notes|state|chapter|maps`
-(header `X-Admin-Token` for admin actions) · `WS /api/sessions/{id}/ws`
-(send `{"type":"roll","faces":20,"roller":"Aria"}`).
+Key endpoints: `GET /health` · `POST /api/stories/generate {prompt, length_hours}` ·
+`POST /api/sessions {story_id?, campaign_minutes?}` (host) ·
+`POST /api/sessions/join {code, player_id?}` → returns `player_token` ·
+`POST /api/sessions/{id}/roll|narrate|notes|state|chapter|maps|chat|recap|campaign/extend|combat*`
+(admin actions: header `X-Admin-Token`; chat: header `X-Player-Token` — sender is
+resolved server-side from the token) · `WS /api/sessions/{id}/ws?token=<player_token>`
+(send `{"type":"roll","faces":20,"mode":"adv"}` or `{"type":"chat","text":"..."}`).
+When `ACCESS_TOKEN` is set in `.env`, host-capable endpoints (`POST /api/sessions`,
+`/api/stories/*`, passkey options) require header `X-Access-Token`; passkey
+endpoints also validate `Origin` against the request `Host`.
+
+Auth/data-isolation model (added in the full audit pass): `session_players`
+records join membership; snapshots, narration and save-point emails are scoped
+to session members; the WS channel requires a valid join token (4401 otherwise);
+snapshots carry only the last 200 events; audio transcription stays in memory
+(faster-whisper decodes from BytesIO, never disk). Audit regression tests live
+in `backend/tests/test_audit.py` and `frontend/src/audit.test.tsx`.

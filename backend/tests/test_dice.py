@@ -48,3 +48,30 @@ def test_ability_scores():
     scores = ability_scores()
     assert len(scores) == 6
     assert all(3 <= s <= 18 for s in scores)
+
+
+def test_advantage_keeps_highest():
+    for _ in range(50):
+        r = roll(1, 20, 3, "adv")
+        assert r["mode"] == "adv" and len(r["rolls"]) == 2
+        assert r["kept"] == max(r["rolls"]) and r["total"] == r["kept"] + 3
+
+
+def test_disadvantage_keeps_lowest():
+    for _ in range(50):
+        r = roll(1, 20, 0, "dis")
+        assert r["kept"] == min(r["rolls"]) and r["total"] == r["kept"]
+
+
+def test_advantage_only_applies_to_single_d20():
+    r = roll(2, 20, 0, "adv")
+    assert r["mode"] == "normal" and len(r["rolls"]) == 2
+    r = roll(1, 6, 0, "adv")
+    assert r["mode"] == "normal"
+
+
+def test_invalid_mode():
+    import pytest
+
+    with pytest.raises(ValueError):
+        roll(1, 20, 0, "lucky")

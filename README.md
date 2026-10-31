@@ -39,15 +39,17 @@ POST /api/sessions/1/state   {"state":"ended"}  header X-Admin-Token: demo-admin
 # ended session writes save-point emails to ./outbox/
 ```
 
-WebSocket live channel: `ws://<host>:8000/api/sessions/1/ws` — send
-`{"type":"roll","faces":20,"roller":"Aria"}` and every connected client receives
-the `dice` event in real time.
+WebSocket live channel: `ws://<host>:8000/api/sessions/1/ws?token=<player_token>`
+(the token from `POST /api/sessions/join`) — send `{"type":"roll","faces":20}`
+and every connected client receives the `dice` event in real time, with the
+roller attributed from the token.
 
 ## Development
 
 - **Self-test loop (run this first, no input needed):** `python3 scripts/smoke_loop.py --watch 3` —
-  boots the app on 127.0.0.1 and plays a full session (host → join → dice over WebSocket →
-  narration → chapter → end → save-point email) asserting 20 steps. See [VIBE.md](VIBE.md).
+  boots the app on 127.0.0.1 and plays a full session (LLM campaign from the host's story idea →
+  host → join → campaign clock + extend → dice over WebSocket → combat tracker → chat → AI recap →
+  narration → chapter → end → save-point email) asserting 37 steps. See [VIBE.md](VIBE.md).
 - Backend tests: `cd backend && pytest`
 - Frontend tests: `cd frontend && npm test`
 - E2E (mobile viewports): `cd frontend && npm run e2e`

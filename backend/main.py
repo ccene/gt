@@ -2,7 +2,6 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from config import settings
@@ -34,7 +33,7 @@ else:
 
     @app.get("/")
     def index():
-        return FileResponse.__self__ if False else {
+        return {
             "status": "api-only",
             "note": "frontend not built yet; run scripts/setup.sh",
             "api_docs": "/docs",

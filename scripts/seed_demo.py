@@ -44,13 +44,19 @@ STORY = {
     "title": "The Sunken Crypt of Morvaine",
     "source": "imported",
     "content": {
-        "title": "The Sunken Crypt of Morvaine",
-        "logline": "Four heroes descend into a flooded crypt to stop a cult from raising the Hollow King.",
-        "chapters": [
-            {"title": "The Drowned Gate", "summary": "Cross the flooded causeway; fight off sahuagin scouts."},
-            {"title": "Hall of Whispers", "summary": "Puzzle room; the walls tell lies. Find the true path."},
-            {"title": "The Hollow King", "summary": "Boss fight in the ritual chamber."},
-        ],
+        "provider": "seed",
+        "length_hours": 1.0,
+        "campaign": {
+            "title": "The Sunken Crypt of Morvaine",
+            "logline": "Four heroes descend into a flooded crypt to stop a cult from raising the Hollow King.",
+            "opening_scene": "Rain hammers the drowned gate of Morvaine. Black water laps at the broken causeway, and somewhere below, a bell tolls.",
+            "chapters": [
+                {"title": "The Drowned Gate", "summary": "Cross the flooded causeway; fight off sahuagin scouts."},
+                {"title": "Hall of Whispers", "summary": "Puzzle room; the walls tell lies. Find the true path."},
+                {"title": "The Hollow King", "summary": "Boss fight in the ritual chamber."},
+            ],
+            "npcs": [{"name": "Sahuagin scout leader", "role": "miniboss", "one_liner": "Hungry, clever, and already underwater."}],
+        },
     },
 }
 
@@ -65,10 +71,28 @@ def main() -> None:
     settings.ensure_dirs()
     db.get_conn()  # init schema
 
+    # Idempotent: wipe any previous demo session (and its dependents) first.
+    old = db.query_one("SELECT id FROM sessions WHERE code = 'DEMO42'")
+    if old:
+        for stmt in (
+            "DELETE FROM session_events WHERE session_id = ?",
+            "DELETE FROM maps WHERE session_id = ?",
+            "DELETE FROM combatants WHERE session_id = ?",
+            "DELETE FROM combat_state WHERE session_id = ?",
+            "DELETE FROM session_players WHERE session_id = ?",
+            "DELETE FROM sessions WHERE id = ?",
+        ):
+            db.execute(stmt, (old["id"],))
+
     player_ids = []
     for name, email, char in PLAYERS:
-        cur = db.execute("INSERT INTO players (name, email) VALUES (?, ?)", (name, email))
-        pid = cur.lastrowid
+        existing = db.query_one("SELECT id FROM players WHERE name = ?", (name,))
+        if existing:
+            pid = existing["id"]
+            db.execute("UPDATE players SET email = ? WHERE id = ?", (email, pid))
+            db.execute("DELETE FROM characters WHERE player_id = ?", (pid,))
+        else:
+            pid = db.execute("INSERT INTO players (name, email) VALUES (?, ?)", (name, email)).lastrowid
         db.execute(
             "INSERT INTO characters (player_id, name, sheet) VALUES (?, ?, ?)",
             (pid, char["name"], db.dumps(char["sheet"])),
@@ -81,12 +105,31 @@ def main() -> None:
     )
     story_id = cur.lastrowid
 
+    # Demo session starts 'playing' with a running 1-hour campaign clock.
+    from datetime import UTC, datetime, timedelta
+
+    started = datetime.now(UTC) - timedelta(minutes=10)
+    ends = started + timedelta(minutes=60)
     cur = db.execute(
-        "INSERT INTO sessions (code, admin_token, story_id, state, chapter_index, save_point)"
-        " VALUES ('DEMO42', 'demo-admin-token', ?, 'playing', 0, ?)",
-        (story_id, db.dumps({"label": "Chapter 1", "chapter_index": 0, "notes": "Arrived at the drowned gate. The water is black and cold."})),
+        "INSERT INTO sessions (code, admin_token, story_id, state, chapter_index, save_point,"
+        " campaign_minutes, campaign_started_at, campaign_ends_at)"
+        " VALUES ('DEMO42', 'demo-admin-token', ?, 'playing', 0, ?, 60, ?, ?)",
+        (
+            story_id,
+            db.dumps({"label": "Chapter 1", "chapter_index": 0, "notes": "Arrived at the drowned gate. The water is black and cold."}),
+            started.isoformat(),
+            ends.isoformat(),
+        ),
     )
     sid = cur.lastrowid
+
+    import secrets
+
+    for pid in player_ids:
+        db.execute(
+            "INSERT INTO session_players (session_id, player_id, token) VALUES (?, ?, ?)",
+            (sid, pid, secrets.token_urlsafe(24)),
+        )
 
     for m in MAPS:
         db.execute("INSERT INTO maps (session_id, label, markers) VALUES (?, ?, ?)", (sid, m["label"], db.dumps(m["markers"])))

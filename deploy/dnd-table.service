@@ -7,6 +7,9 @@ Wants=network-online.target
 Type=simple
 User=%i
 WorkingDirectory=/opt/dnd-table
+# backend modules import each other top-level (import db, from config import ...),
+# so uvicorn must be able to resolve them from backend/
+Environment=PYTHONPATH=/opt/dnd-table/backend
 EnvironmentFile=/opt/dnd-table/.env
 ExecStart=/opt/dnd-table/.venv/bin/python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000
 Restart=on-failure

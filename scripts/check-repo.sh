@@ -11,9 +11,17 @@ require() {
 }
 
 for f in README.md GETTING_STARTED.md MASTER_PLAN.md VIBE.md .gitignore .env.example \
-         .github/workflows/ci.yml scripts/check-repo.sh scripts/smoke_loop.py; do
+         .github/workflows/ci.yml scripts/check-repo.sh scripts/smoke_loop.py \
+         deploy/dnd-table.service; do
   require "$f"
 done
+
+# The systemd unit runs `uvicorn backend.main:app` from the repo root; backend
+# modules import each other top-level, so PYTHONPATH must point at backend/.
+if ! grep -q "PYTHONPATH=.*backend" deploy/dnd-table.service; then
+  echo "MISSING: deploy/dnd-table.service must set Environment=PYTHONPATH=<repo>/backend"
+  fail=1
+fi
 
 if git ls-files | grep -Eq '(^|/)\.env$|(^|/)\.env\.[^e]'; then
   echo "ERROR: a real .env file is tracked; only .env.example may be committed"

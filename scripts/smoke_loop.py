@@ -5,9 +5,13 @@ any human input. It starts the real Uvicorn server on a loopback port with a
 throwaway database, then drives the full game flow through the same REST +
 WebSocket API the PWA uses:
 
-    health -> host new game -> player joins -> character sheet ->
-    live dice over WS (seen by a second WS client) -> AI narration ->
-    next chapter -> set map -> end session -> save-point email in outbox/
+    health -> LLM generates a campaign from the host's story input (1h default)
+    -> host new game with that story + 60min campaign -> player joins ->
+    character sheet -> live dice over WS (seen by a second WS client) ->
+    campaign clock starts on play, host extends +30min -> initiative/combat
+    tracker (start, roll, next, HP, conditions) -> advantage roll -> chat ->
+    AI recap -> AI narration -> next chapter -> set map -> end session ->
+    save-point email in outbox/
 
 Usage:
     python3 scripts/smoke_loop.py            # one pass, exit 0/1
@@ -91,10 +95,26 @@ async def run_pass(httpx, websockets) -> None:
             r = await c.get("/")
             step("GET / serves the built PWA (or api-only notice)", r.status_code == 200)
 
-            r = await c.post("/api/sessions", json={})
+            # The host's story input goes to the LLM, which generates the campaign.
+            r = await c.post(
+                "/api/stories/generate",
+                json={"prompt": "A crew of sky-pirates raids a cloud castle", "length_hours": 1},
+                timeout=60.0,
+            )
+            story = r.json()
+            ok = (
+                r.status_code == 200
+                and story.get("length_hours") == 1.0
+                and len(story["content"]["campaign"]["chapters"]) == 3
+                and bool(story["content"]["campaign"]["title"])
+            )
+            step("LLM generates a 1-hour campaign (3 chapters) from the host's input", ok, str(story)[:300])
+
+            r = await c.post("/api/sessions", json={"story_id": story["id"], "campaign_minutes": 60})
             sess = r.json()
             code, sid, token = sess["code"], sess["id"], sess["admin_token"]
-            step("POST /api/sessions creates a game with a 6-char code", len(code) == 6, str(sess))
+            ok = len(code) == 6 and sess["campaign"]["minutes"] == 60
+            step("POST /api/sessions creates a game (6-char code, 60-min campaign)", ok, str(sess))
 
             r = await c.post("/api/players", json={"name": "SmokeTester", "email": "smoke@example.com"})
             pid = r.json()["id"]
@@ -104,20 +124,67 @@ async def run_pass(httpx, websockets) -> None:
             )
             step("player + character sheet submit", r.status_code == 200 and r.json()["name"] == "Smoke the Bold")
 
-            r = await c.post("/api/sessions/join", json={"code": code})
+            r = await c.post("/api/sessions/join", json={"code": code, "player_id": pid})
             joined = r.json()
-            step("join by code returns snapshot", joined["snapshot"]["session"]["code"] == code)
+            ptoken = joined["player_token"]
+            step("join by code returns snapshot + player token", joined["snapshot"]["session"]["code"] == code and bool(ptoken))
             snap_chars = joined["snapshot"]["characters"]
             step("snapshot includes the submitted character", any(ch["name"] == "Smoke the Bold" for ch in snap_chars))
 
             r = await c.post(f"/api/sessions/{sid}/state", json={"state": "playing"}, headers={"X-Admin-Token": token})
-            step("host starts session (admin token)", r.json()["state"] == "playing")
+            started_body = r.json()
+            step("host starts session (admin token)", started_body["state"] == "playing")
+
+            camp = started_body["campaign"]
+            from datetime import datetime
+
+            ok = bool(camp["started_at"] and camp["ends_at"]) and abs(
+                (datetime.fromisoformat(camp["ends_at"]) - datetime.fromisoformat(camp["started_at"])).total_seconds()
+                - 60 * 60
+            ) < 5
+            step("campaign clock starts on play (1h default)", ok, str(camp))
+
+            r = await c.post(f"/api/sessions/{sid}/campaign/extend", json={"minutes": 30})
+            step("extending the campaign without admin token is rejected", r.status_code in (401, 403), str(r.status_code))
+            r = await c.post(
+                f"/api/sessions/{sid}/campaign/extend", json={"minutes": 30}, headers={"X-Admin-Token": token}
+            )
+            ok = r.status_code == 200 and abs(
+                (datetime.fromisoformat(r.json()["ends_at"]) - datetime.fromisoformat(camp["started_at"])).total_seconds()
+                - 90 * 60
+            ) < 5
+            step("host extends the campaign by +30 min (90 min total)", ok, str(r.json()))
 
             r = await c.post("/api/sessions/join", json={"code": "NOPE99"})
             step("joining a bad code is rejected", r.status_code == 404)
 
-            async with websockets.connect(f"{WS}/api/sessions/{sid}/ws") as ws_a, websockets.connect(
-                f"{WS}/api/sessions/{sid}/ws"
+            r = await c.post("/api/sessions/join", json={"code": code, "player_id": pid})
+            snap = r.json()["snapshot"]
+            ok = (
+                snap["campaign"]["minutes"] == 60
+                and snap["story"]["id"] == story["id"]
+                and snap["combat"]["active"] is False
+            )
+            step("snapshot carries campaign, story and combat state", ok, str({k: snap.get(k) for k in ("campaign", "story", "combat")})[:300])
+
+            # session isolation: another session must not see this one's heroes
+            r = await c.post("/api/sessions", json={})
+            other = r.json()
+            r = await c.post("/api/players", json={"name": "Outsider", "email": ""})
+            outsider = r.json()["id"]
+            r = await c.post("/api/sessions/join", json={"code": other["code"], "player_id": outsider})
+            other_names = [ch["name"] for ch in r.json()["snapshot"]["characters"]]
+            step("snapshots are scoped to session members (no cross-session leak)", "Smoke the Bold" not in other_names, str(other_names))
+
+            try:
+                async with websockets.connect(f"{WS}/api/sessions/{sid}/ws") as ws_noauth:
+                    await ws_noauth.recv()
+                step("WS without a player token is rejected", False, "connected without token")
+            except Exception:
+                step("WS without a player token is rejected", True)
+
+            async with websockets.connect(f"{WS}/api/sessions/{sid}/ws?token={ptoken}") as ws_a, websockets.connect(
+                f"{WS}/api/sessions/{sid}/ws?token={ptoken}"
             ) as ws_b:
                 snap_a = json.loads(await ws_a.recv())
                 await ws_b.recv()
@@ -149,6 +216,62 @@ async def run_pass(httpx, websockets) -> None:
                 and roll["dice"] == "2d6+3"
             )
             step("REST dice roll shape (2d6+3 in bounds)", ok, str(roll))
+
+            r = await c.post(f"/api/sessions/{sid}/roll", json={"faces": 20, "mode": "adv", "roller": "adv"})
+            adv = r.json()
+            ok = adv.get("mode") == "adv" and adv.get("kept") == max(adv["rolls"]) and adv["total"] == adv["kept"]
+            step("advantage roll keeps the higher d20", ok, str(adv))
+
+            # initiative / combat tracker
+            r = await c.post(
+                f"/api/sessions/{sid}/combat",
+                json={
+                    "combatants": [
+                        {"name": "Smoke the Bold", "hp": 12, "max_hp": 12, "ac": 15, "init_mod": 2},
+                        {"name": "Goblin", "hp": 7, "max_hp": 7, "ac": 13, "is_enemy": True, "init_mod": 1},
+                    ]
+                },
+                headers={"X-Admin-Token": token},
+            )
+            combat = r.json()
+            step("host starts combat with combatants", r.status_code == 200 and combat["active"] and len(combat["combatants"]) == 2, str(combat)[:200])
+
+            r = await c.post(f"/api/sessions/{sid}/combat/roll", headers={"X-Admin-Token": token})
+            combat = r.json()
+            inits = [c["initiative"] for c in combat["combatants"]]
+            step("initiative rolled and sorted descending", inits == sorted(inits, reverse=True), str(inits))
+
+            r = await c.post(f"/api/sessions/{sid}/combat/next", headers={"X-Admin-Token": token})
+            step("next turn advances the tracker", r.json()["turn_index"] == 1, str(r.json()))
+
+            goblin = next(c for c in combat["combatants"] if c["name"] == "Goblin")
+            r = await c.post(
+                f"/api/sessions/{sid}/combat/{goblin['id']}",
+                json={"hp_delta": -3, "condition_toggle": "poisoned"},
+            )
+            updated = next(c for c in r.json()["combatants"] if c["id"] == goblin["id"])
+            step("combatant HP damage + condition applied", updated["hp"] == 4 and "poisoned" in updated["conditions"], str(updated))
+
+            r = await c.post(f"/api/sessions/{sid}/combat/end", headers={"X-Admin-Token": token})
+            step("combat ends and clears", r.json()["active"] is False)
+
+            r = await c.post(
+                f"/api/sessions/{sid}/chat",
+                json={"from": "SPOOF", "text": "I sneak ahead"},
+                headers={"X-Player-Token": ptoken},
+            )
+            ok = r.status_code == 200 and r.json()["text"] == "I sneak ahead" and r.json()["from"] == "SmokeTester"
+            step("table chat over REST (sender resolved from token)", ok, str(r.json())[:200])
+            r = await c.post(f"/api/sessions/{sid}/chat", json={"text": "no token"})
+            step("chat without a player token is rejected", r.status_code == 403, str(r.status_code))
+
+            r = await c.post(f"/api/sessions/{sid}/recap")
+            step("AI recap of what happened so far", r.status_code == 200 and bool(r.json().get("text")), str(r.json())[:200])
+
+            r = await c.post(
+                f"/api/sessions/{sid}/characters/{snap_chars[0]['id']}/update", json={"hp": 9, "conditions": ["concentrating"]}
+            )
+            step("character HP/conditions update live", r.status_code == 200 and r.json()["sheet"]["hp"] == 9, str(r.json())[:200])
 
             r = await c.post(
                 f"/api/sessions/{sid}/narrate", json={"scene": "The party enters the torch-lit crypt."}

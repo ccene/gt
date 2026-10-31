@@ -143,3 +143,215 @@ def test_relative_db_path_resolves_to_repo_root(tmp_path, monkeypatch):
 
     monkeypatch.setattr(cfg.settings, "database_url", "sqlite:///./data/app.db")
     assert cfg.settings.db_path == (cfg.BASE_DIR / "data" / "app.db").resolve()
+
+
+# --- campaign / story generation from host input ---
+
+def test_generate_story_from_host_prompt_defaults_to_one_hour(client):
+    r = client.post(
+        "/api/stories/generate",
+        json={"prompt": "A crew of sky-pirates raids a cloud castle", "length_hours": 1},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["length_hours"] == 1.0
+    campaign = body["content"]["campaign"]
+    assert campaign["title"]
+    # ~20 min per chapter -> a 1-hour campaign gets 3 chapters
+    assert len(campaign["chapters"]) == 3
+    assert "provider" in body["content"]
+
+
+def test_generate_story_length_drives_chapter_count(client):
+    r = client.post("/api/stories/generate", json={"prompt": "heist at the gem museum", "length_hours": 2})
+    assert r.status_code == 200
+    assert len(r.json()["content"]["campaign"]["chapters"]) == 6
+
+
+def test_generate_story_clamps_length(client):
+    r = client.post("/api/stories/generate", json={"prompt": "x", "length_hours": 99})
+    assert r.json()["length_hours"] == 8.0
+    r = client.post("/api/stories/generate", json={"prompt": "x", "length_hours": 0.01})
+    assert r.json()["length_hours"] == 0.25
+
+
+def test_session_campaign_defaults_to_60_minutes(client):
+    s = client.post("/api/sessions", json={}).json()
+    assert s["campaign"]["minutes"] == 60
+    assert s["campaign"]["started_at"] is None
+
+
+def test_session_campaign_custom_length_and_story(client):
+    story = client.post("/api/stories/generate", json={"prompt": "vampire ball", "length_hours": 1}).json()
+    s = client.post("/api/sessions", json={"story_id": story["id"], "campaign_minutes": 90}).json()
+    assert s["campaign"]["minutes"] == 90
+    assert client.post("/api/sessions", json={"story_id": 9999}).status_code == 422
+
+
+def test_campaign_clock_starts_on_playing_and_extend_adds_time(client, session):
+    token = session["admin_token"]
+    sid = session["id"]
+    r = client.post(f"/api/sessions/{sid}/state", json={"state": "playing"}, headers={"X-Admin-Token": token})
+    camp = r.json()["campaign"]
+    assert camp["started_at"] and camp["ends_at"]
+    # extend without token -> 403
+    assert client.post(f"/api/sessions/{sid}/campaign/extend", json={"minutes": 30}).status_code == 403
+    r = client.post(
+        f"/api/sessions/{sid}/campaign/extend", json={"minutes": 30}, headers={"X-Admin-Token": token}
+    )
+    assert r.status_code == 200
+    from datetime import datetime
+
+    ends = datetime.fromisoformat(r.json()["ends_at"])
+    started = datetime.fromisoformat(camp["started_at"])
+    # 60 min default + 30 min extension = 90 min total
+    assert abs((ends - started).total_seconds() - 90 * 60) < 5
+
+
+def test_extend_before_start_bumps_minutes(client, session):
+    r = client.post(
+        f"/api/sessions/{session['id']}/campaign/extend",
+        json={"minutes": 45},
+        headers={"X-Admin-Token": session["admin_token"]},
+    )
+    assert r.json()["minutes"] == 105
+
+
+def test_snapshot_includes_campaign_story_combat(client, session):
+    story = client.post("/api/stories/generate", json={"prompt": "dragon heist"}).json()
+    client.post("/api/sessions", json={"story_id": story["id"], "campaign_minutes": 60})
+    s = client.post("/api/sessions", json={"story_id": story["id"], "campaign_minutes": 60}).json()
+    joined = client.post("/api/sessions/join", json={"code": s["code"]}).json()
+    snap = joined["snapshot"]
+    assert snap["campaign"]["minutes"] == 60
+    assert snap["story"]["id"] == story["id"]
+    assert snap["story"]["content"]["campaign"]["title"]
+    assert snap["combat"]["active"] is False
+
+
+# --- combat / initiative ---
+
+def _start_combat(client, session):
+    return client.post(
+        f"/api/sessions/{session['id']}/combat",
+        json={
+            "combatants": [
+                {"name": "Aria", "hp": 30, "max_hp": 30, "ac": 16, "init_mod": 2},
+                {"name": "Goblin", "hp": 7, "max_hp": 7, "is_enemy": True, "ac": 13, "init_mod": 1},
+                {"name": "Goblin 2", "hp": 7, "max_hp": 7, "is_enemy": True, "init_mod": 1},
+            ]
+        },
+        headers={"X-Admin-Token": session["admin_token"]},
+    )
+
+
+def test_combat_requires_admin_and_combatants(client, session):
+    assert client.post(f"/api/sessions/{session['id']}/combat", json={"combatants": []}).status_code == 403
+    r = client.post(
+        f"/api/sessions/{session['id']}/combat",
+        json={"combatants": []},
+        headers={"X-Admin-Token": session["admin_token"]},
+    )
+    assert r.status_code == 422
+
+
+def test_combat_start_roll_next_flow(client, session):
+    sid = session["id"]
+    token = session["admin_token"]
+    r = _start_combat(client, session)
+    assert r.status_code == 200
+    state = r.json()
+    assert state["active"] and len(state["combatants"]) == 3
+
+    r = client.post(f"/api/sessions/{sid}/combat/roll", headers={"X-Admin-Token": token})
+    state = r.json()
+    inits = [c["initiative"] for c in state["combatants"]]
+    assert inits == sorted(inits, reverse=True)  # sorted descending
+    assert all(2 <= i <= 22 for i in inits)  # d20 + init_mod
+    assert state["round"] == 1 and state["turn_index"] == 0
+
+    r = client.post(f"/api/sessions/{sid}/combat/next", headers={"X-Admin-Token": token})
+    assert r.json()["turn_index"] == 1
+    client.post(f"/api/sessions/{sid}/combat/next", headers={"X-Admin-Token": token})
+    r = client.post(f"/api/sessions/{sid}/combat/next", headers={"X-Admin-Token": token})
+    assert r.json()["turn_index"] == 0 and r.json()["round"] == 2
+
+
+def test_combat_update_hp_and_conditions(client, session):
+    sid = session["id"]
+    state = _start_combat(client, session).json()
+    goblin = next(c for c in state["combatants"] if c["name"] == "Goblin")
+    r = client.post(f"/api/sessions/{sid}/combat/{goblin['id']}", json={"hp_delta": -3, "condition_toggle": "poisoned"})
+    assert r.status_code == 200
+    updated = next(c for c in r.json()["combatants"] if c["id"] == goblin["id"])
+    assert updated["hp"] == 4 and "poisoned" in updated["conditions"]
+    # clamp at 0 and max_hp
+    r = client.post(f"/api/sessions/{sid}/combat/{goblin['id']}", json={"hp_delta": -99})
+    assert next(c for c in r.json()["combatants"] if c["id"] == goblin["id"])["hp"] == 0
+    # toggle off
+    r = client.post(f"/api/sessions/{sid}/combat/{goblin['id']}", json={"condition_toggle": "poisoned"})
+    assert "poisoned" not in next(c for c in r.json()["combatants"] if c["id"] == goblin["id"])["conditions"]
+    assert client.post(f"/api/sessions/{sid}/combat/999", json={"hp": 1}).status_code == 404
+
+
+def test_combat_end_clears(client, session):
+    sid = session["id"]
+    token = session["admin_token"]
+    _start_combat(client, session)
+    r = client.post(f"/api/sessions/{sid}/combat/end", headers={"X-Admin-Token": token})
+    assert r.json()["active"] is False
+    joined = client.post("/api/sessions/join", json={"code": session["code"]}).json()
+    assert joined["snapshot"]["combat"]["active"] is False
+
+
+# --- live character sheet updates, chat, recap, adv/dis rolls ---
+
+def test_character_update_broadcast_fields(client, session):
+    p = client.post("/api/players", json={"name": "Aria"}).json()
+    c = client.post(f"/api/players/{p['id']}/character", json={"name": "Aria the Bold", "sheet": {"hp": 30}}).json()
+    r = client.post(
+        f"/api/sessions/{session['id']}/characters/{c['id']}/update",
+        json={"hp": 24, "conditions": ["concentrating"]},
+    )
+    assert r.status_code == 200
+    assert r.json()["sheet"]["hp"] == 24 and r.json()["sheet"]["conditions"] == ["concentrating"]
+    assert client.post(f"/api/sessions/{session['id']}/characters/999/update", json={"hp": 1}).status_code == 404
+
+
+def test_chat_rest_and_recap(client, session):
+    sid = session["id"]
+    p = client.post("/api/players", json={"name": "Aria"}).json()
+    token = client.post("/api/sessions/join", json={"code": session["code"], "player_id": p["id"]}).json()[
+        "player_token"
+    ]
+    hdrs = {"X-Player-Token": token}
+    r = client.post(f"/api/sessions/{sid}/chat", json={"from": "SPOOF", "text": "I check the door"}, headers=hdrs)
+    assert r.status_code == 200
+    assert r.json()["text"] == "I check the door"
+    assert r.json()["from"] == "Aria"  # sender resolved from token, not the payload
+    # no/invalid token -> 403; empty text -> 422
+    assert client.post(f"/api/sessions/{sid}/chat", json={"text": "hi"}).status_code == 403
+    bad = client.post(f"/api/sessions/{sid}/chat", json={"text": "hi"}, headers={"X-Player-Token": "bad"})
+    assert bad.status_code == 403
+    assert client.post(f"/api/sessions/{sid}/chat", json={"text": "  "}, headers=hdrs).status_code == 422
+    r = client.post(f"/api/sessions/{sid}/narrate", json={"scene": "A cold wind blows through the hall."})
+    assert r.status_code == 200
+    r = client.post(f"/api/sessions/{sid}/recap")
+    assert r.status_code == 200 and isinstance(r.json()["text"], str) and r.json()["text"]
+
+
+def test_roll_advantage_disadvantage(client, session):
+    r = client.post(
+        f"/api/sessions/{session['id']}/roll",
+        json={"faces": 20, "modifier": 5, "mode": "adv", "roller": "Aria"},
+    )
+    body = r.json()
+    assert body["mode"] == "adv" and len(body["rolls"]) == 2
+    assert body["total"] == max(body["rolls"]) + 5 and body["kept"] == max(body["rolls"])
+    r = client.post(f"/api/sessions/{session['id']}/roll", json={"faces": 20, "mode": "dis"})
+    assert r.json()["total"] == min(r.json()["rolls"])
+    # adv on non-d20 falls back to a normal roll
+    r = client.post(f"/api/sessions/{session['id']}/roll", json={"faces": 6, "mode": "adv"})
+    assert r.json()["mode"] == "normal" and len(r.json()["rolls"]) == 1
+    # invalid mode rejected
+    assert client.post(f"/api/sessions/{session['id']}/roll", json={"mode": "lucky"}).status_code == 422

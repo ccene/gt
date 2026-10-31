@@ -365,3 +365,136 @@ button.danger {
   color: var(--gold);
   padding-left: 0.35em; /* optically center letter-spaced text */
 }
+
+/* --- campaign timer, story, combat, chat --- */
+
+.row.spread {
+  justify-content: space-between;
+  align-items: center;
+}
+
+button.small {
+  min-height: 40px;
+  min-width: 40px;
+  padding: 6px 12px;
+  font-size: 0.9rem;
+  border-radius: 10px;
+}
+
+textarea {
+  font-size: 1.05rem;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid #3a3260;
+  background: var(--panel);
+  color: var(--text);
+  font-family: inherit;
+  resize: vertical;
+  min-height: 48px;
+}
+
+.campaign-bar .timer-track {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  overflow: hidden;
+}
+
+.campaign-bar .timer-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--gold), #e8c85a);
+  transition: width 1s linear;
+}
+
+.timer-label {
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.chapter-list {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.chapter-list li.current {
+  color: var(--gold);
+  font-weight: 700;
+}
+
+.hero .hp-controls,
+.combatant .hp-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.chips {
+  gap: 6px;
+}
+
+.chip {
+  min-height: 36px;
+  min-width: 36px;
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  border-radius: 999px;
+  border: 1px solid #3a3260;
+  background: transparent;
+  color: var(--muted);
+}
+
+.chip.on {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: #12101c;
+  font-weight: 700;
+}
+
+.combat-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.combatant {
+  background: var(--panel-2);
+  border: 1px solid #3a3260;
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.combatant.current {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px var(--gold);
+}
+
+.combatant.down {
+  opacity: 0.55;
+}
+
+.chat-log {
+  max-height: 220px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--panel-2);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.chat-msg {
+  margin: 0;
+  font-size: 0.95rem;
+}

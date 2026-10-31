@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
-cd "$(dirname "$0")/.."
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
 
 if [ ! -d backend ]; then
   echo "backend/ not present yet — nothing to run (see MASTER_PLAN.md phase P1)"
@@ -10,8 +11,9 @@ fi
 HOST="${HOST:-0.0.0.0}"
 PORT="${PORT:-8000}"
 
-if [ -d .venv ]; then
-  PY=.venv/bin/python
+# Absolute path so the venv resolves no matter the cwd after `cd backend`.
+if [ -x "$ROOT/.venv/bin/python" ]; then
+  PY="$ROOT/.venv/bin/python"
 else
   PY=python3
 fi

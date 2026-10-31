@@ -29,15 +29,21 @@ def send_save_point(to_email: str, player_name: str, character_name: str, sheet:
         return {"sent": False, "via": "outbox", "path": str(path)}
 
     msg = EmailMessage()
-    msg["From"] = settings.smtp_from or settings.smtp_user
+    msg["From"] = settings.smtp_from or settings.smtp_user or "dnd-table@localhost"
     msg["To"] = to_email
     msg["Subject"] = subject
     msg.set_content(body)
-    with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as smtp:
-        smtp.starttls()
-        if settings.smtp_user:
-            smtp.login(settings.smtp_user, settings.smtp_password)
-        smtp.send_message(msg)
+    if settings.smtp_port == 465:
+        with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=20) as smtp:
+            if settings.smtp_user:
+                smtp.login(settings.smtp_user, settings.smtp_password)
+            smtp.send_message(msg)
+    else:
+        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as smtp:
+            smtp.starttls()
+            if settings.smtp_user:
+                smtp.login(settings.smtp_user, settings.smtp_password)
+            smtp.send_message(msg)
     return {"sent": True, "via": "smtp", "to": to_email}
 
 
@@ -49,9 +55,18 @@ def send_all_save_points(session_id: int) -> list[dict]:
         return []
     save_point = db.loads(session["save_point"])
     results = []
+    # Only this session's members get save points — never other sessions'
+    # characters that happen to live in the same database. Sessions with no
+    # recorded members fall back to all characters (legacy/demo data).
     rows = db.query(
         "SELECT p.name AS player, p.email, c.name AS character, c.sheet FROM characters c"
-        " JOIN players p ON p.id = c.player_id ORDER BY p.id"
+        " JOIN players p ON p.id = c.player_id"
+        " WHERE NOT EXISTS (SELECT 1 FROM session_players sp"
+        "   WHERE sp.session_id = ? AND sp.player_id IS NOT NULL)"
+        "    OR c.player_id IN (SELECT sp.player_id FROM session_players sp"
+        "   WHERE sp.session_id = ? AND sp.player_id IS NOT NULL)"
+        " ORDER BY p.id",
+        (session_id, session_id),
     )
     for row in rows:
         result = send_save_point(

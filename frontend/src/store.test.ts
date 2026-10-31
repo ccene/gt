@@ -40,4 +40,36 @@ describe("store", () => {
     }
     expect(useApp.getState().dice.length).toBe(20);
   });
+
+  it("tracks campaign, combat, character and recap events", () => {
+    useApp.getState().setSnapshot({
+      session: { id: 7, code: "ABC123", state: "playing", chapter_index: 0, save_point: {} },
+      campaign: { minutes: 60, started_at: "2026-10-31T10:00:00+00:00", ends_at: "2026-10-31T11:00:00+00:00" },
+      story: { id: 3, title: "Sky Pirates", source: "generated", content: { campaign: { title: "Sky Pirates", chapters: [{ title: "C1" }] } } },
+      combat: {
+        active: true,
+        round: 1,
+        turn_index: 0,
+        combatants: [{ id: 1, name: "Goblin", initiative: 12, init_mod: 0, hp: 7, max_hp: 7, ac: 13, is_enemy: true, conditions: [], turn_order: 0 }],
+      },
+      characters: [{ id: 1, name: "Aria", player: "Aria", sheet: { hp: 30 } }],
+      maps: [],
+      events: [],
+      clients: 1,
+    });
+    let s = useApp.getState();
+    expect(s.campaign.ends_at).toContain("11:00");
+    expect(s.story?.title).toBe("Sky Pirates");
+    expect(s.combat.active).toBe(true);
+
+    useApp.getState().pushEvent("campaign", { minutes: 90, started_at: "t", ends_at: "t2" });
+    useApp.getState().pushEvent("combat", { active: true, round: 2, turn_index: 0, combatants: [] });
+    useApp.getState().pushEvent("character", { id: 1, sheet: { hp: 22, conditions: ["poisoned"] } });
+    useApp.getState().pushEvent("recap", { text: "The party fought goblins." });
+    s = useApp.getState();
+    expect(s.campaign.minutes).toBe(90);
+    expect(s.combat.round).toBe(2);
+    expect(s.characters[0].sheet.hp).toBe(22);
+    expect(s.recap).toContain("The party fought goblins.");
+  });
 });

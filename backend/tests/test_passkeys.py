@@ -4,7 +4,7 @@ import json
 import db
 import passkeys
 
-ORIGIN = "http://localhost:8000"
+ORIGIN = "http://testserver"  # must match the TestClient Host header
 
 
 def _b64u(b: bytes) -> str:
@@ -35,7 +35,7 @@ def test_registration_options_shape(client):
     resp = client.post("/api/auth/passkey/register/options", headers={"origin": ORIGIN})
     assert resp.status_code == 200
     body = resp.json()
-    assert body["rp"]["id"] == "localhost"
+    assert body["rp"]["id"] == "testserver"
     assert body["challenge"]
     assert body["user"]["name"] == "host"
 

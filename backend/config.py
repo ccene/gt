@@ -9,7 +9,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=BASE_DIR / ".env", extra="ignore")
 
-    host: str = "0.0.0.0"
+    # LAN-only by design: scripts/harden-host.sh installs a default-deny firewall.
+    host: str = "0.0.0.0"  # nosec B104
     port: int = 8000
     access_token: str = ""
     database_url: str = f"sqlite:///{BASE_DIR / 'data' / 'app.db'}"

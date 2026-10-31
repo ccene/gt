@@ -43,25 +43,22 @@ def _load_model():
 
 
 def transcribe(audio_bytes: bytes) -> dict:
-    """Transcribe webm/ogg/wav bytes. Returns text + segments. Never persists audio."""
-    import tempfile
+    """Transcribe webm/ogg/wav bytes. Returns text + segments.
 
-    # faster-whisper needs a file path; use a private tmp file, delete immediately.
-    with tempfile.NamedTemporaryFile(suffix=".webm", dir=settings.data_dir, delete=False) as tmp:
-        tmp.write(audio_bytes)
-        path = tmp.name
-    try:
-        model = _load_model()
-        segments, info = model.transcribe(path, vad_filter=True)
-        text = " ".join(s.text.strip() for s in segments).strip()
-        return {
-            "provider": "local-whisper",
-            "language": info.language,
-            "duration_s": round(info.duration, 2),
-            "text": text,
-        }
-    finally:
-        Path(path).unlink(missing_ok=True)
+    Audio stays in memory: faster-whisper decodes from a BytesIO stream, so
+    nothing is ever written to disk (the privacy promise in MASTER_PLAN §10).
+    """
+    import io
+
+    model = _load_model()
+    segments, info = model.transcribe(io.BytesIO(audio_bytes), vad_filter=True)
+    text = " ".join(s.text.strip() for s in segments).strip()
+    return {
+        "provider": "local-whisper",
+        "language": info.language,
+        "duration_s": round(info.duration, 2),
+        "text": text,
+    }
 
 
 def available() -> bool:

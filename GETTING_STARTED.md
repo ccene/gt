@@ -85,30 +85,51 @@ like an app.
 
 ## Step 5b — Host a new game yourself (no API needed)
 
-On the host computer, open `http://localhost:8000` and tap **🎲 Host a new
-game**. A big 6-letter code appears on screen, e.g. **K7XQ2M** — that's your
-session code. Tap **Enter as host →** to go in as the game master (host
-controls unlocked). Shout the code out or send it in your group chat.
+On the host computer, open `http://localhost:8000` and:
+
+1. Type a **story idea** (e.g. "a crew of sky-pirates raids a cloud castle"),
+   pick the **campaign length** (default **1 hour**, options up to 4 hours) plus
+   a genre and tone, and tap **✨ Generate story & host**. The LLM turns your
+   idea into a campaign (title, logline, chapters, NPCs — about 20 minutes of
+   play per chapter, so 1 hour = 3 chapters), and the session is created with
+   that story attached.
+2. A big 6-letter code appears on screen, e.g. **K7XQ2M** — that's your
+   session code. Tap **Enter as host →** to go in as the game master (host
+   controls unlocked). Shout the code out or send it in your group chat.
+
+(No story idea handy? Tap **🎲 Quick host (no story)** to start immediately.)
+
+Once play starts, the **⏳ Campaign** bar counts down the session (1 hour by
+default). If the table wants more, the host taps **+30 min** or **+1 hour** to
+extend it mid-session.
 
 **How others join:** each player opens `http://<host-ip>:8000` on their phone,
 enters their name + email + the code, and taps **Join session**. They instantly
-see the table (map, heroes, dice) and everything updates live for everyone.
+see the table (story, campaign timer, map, heroes, combat tracker, dice, chat)
+and everything updates live for everyone.
 
-(Under the hood: "Host a new game" calls `POST /api/sessions` and shows you the
-returned `code`; "Join session" calls `POST /api/sessions/join` with that code,
-then opens a WebSocket so all devices stay in sync. The demo in step 3 just
-pre-creates one of these for you with code DEMO42.)
+(Under the hood: "Generate story & host" calls `POST /api/stories/generate`
+with your idea and length, then `POST /api/sessions` with the new `story_id`
+and `campaign_minutes`; "Join session" calls `POST /api/sessions/join` with
+the code, then opens a WebSocket so all devices stay in sync. The demo in
+step 3 just pre-creates one of these for you with code DEMO42.)
 
 ## Step 6 — Play the demo
 
 | What | How |
 |---|---|
-| Roll dice | Tap any die (d4…d100) in the Dice panel — everyone sees the result instantly |
+| Roll dice | Tap any die (d4…d100) in the Dice panel — everyone sees the result instantly. Use **Advantage / Disadvantage** for d20 rolls (rolls twice, keeps high/low) |
+| Run combat | Host taps **Start combat** in the ⚔️ Combat panel → **Roll initiative** sorts everyone → **Next turn** walks the order (round counter included). Anyone can tap −/+ to apply damage/healing, and tap condition chips (poisoned, prone, concentrating…) to toggle them. Host can add enemies mid-fight |
+| Track hero HP | The Heroes list has −/+ buttons; conditions show as chips. Updates are live for everyone |
+| Talk at the table | The 💬 Table chat panel — messages appear on every device instantly |
+| Catch up | Host taps **📜 Recap so far (AI)** — the AI summarizes what happened so far for anyone who lost the thread |
 | See the map | The Table panel shows the current map with markers |
+| See the story | The 📖 panel shows the generated campaign: logline, opening scene, and the chapter list with the current chapter highlighted |
 | Hear narration | Host taps **Narrate scene** (AI writes the scene), then any player taps **Read narration aloud** (the phone speaks it) |
 | Listen to the table | Host taps **Record table talk** — speech is transcribed **locally** (nothing leaves the device except text notes) |
 | Read the table with the camera | Host taps **Capture table & describe** — one photo goes to Mistral's EU servers, description comes back |
 | Next chapter | Host taps **Next chapter** (screen shows a loading state, like a video game) |
+| Extend the session | Host taps **+30 min** / **+1 hour** in the campaign bar |
 | End the session | Host taps **End session** — every player with an email gets their updated character sheet + save point (in the demo these land as files in `outbox/`) |
 | Host login | The **Host passkey** panel: register a passkey once, then sign in with it (Face ID / Touch ID / PIN) instead of any token |
 

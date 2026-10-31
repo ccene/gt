@@ -152,10 +152,13 @@ written to a local `./outbox/` instead of being sent.
 
 - `players` (id, name, email)
 - `characters` (id, player_id, sheet JSON, updated_at)
-- `stories` (id, source: generated|imported, content JSON, chapters)
-- `sessions` (id, story_id, state, chapter_index, save_point JSON)
-- `session_events` (dice rolls, narration, notes — append-only log)
+- `stories` (id, source: generated|imported, content JSON with `campaign` outline)
+- `sessions` (id, story_id, state, chapter_index, save_point JSON, campaign_minutes, campaign_started_at, campaign_ends_at)
+- `session_players` (session_id, player_id, token — join membership + WS auth)
+- `session_events` (dice rolls, narration, notes, combat, chat, recap — append-only log; snapshots keep the last 200)
 - `maps` (id, image path/URL, markers JSON)
+- `combatants` + `combat_state` (initiative tracker: order, round, HP, conditions)
+- `ai_cache`, `ai_usage`, `webauthn_*`, `admin_sessions`, `audit_log`
 
 ## 7. Testing strategy (robust = layered, all in CI)
 
@@ -221,8 +224,12 @@ to Mistral's EU endpoints; the host account is protected with MFA/passkeys.
   **WebAuthn passkey** — implemented: `POST /api/auth/passkey/register|login`
   (webauthn lib, single-use 5-min challenges, credentials + sign counters in
   SQLite, 12 h admin session token issued on success). The per-session admin
-  token still works as a fallback. No passwords anywhere. Optional
-  `ACCESS_TOKEN` env adds a second factor.
+  token still works as a fallback. No passwords anywhere. The passkey endpoints
+  validate the client `Origin` against the request `Host` (the RP ID derives
+  from it). Optional `ACCESS_TOKEN` env gates all host-capable endpoints
+  (`POST /api/sessions`, `/api/stories/*`, passkey options) via `X-Access-Token`;
+  players authenticate with the per-join `player_token` (required on the
+  WebSocket, `X-Player-Token` on REST chat, sender attribution server-side).
 - **Secrets**: `MISTRAL_API_KEY`, SMTP credentials, and tokens live only in
   `.env` (chmod 600) or a systemd `EnvironmentFile` with 0600 perms — never
   in git, never in logs, never in the DB. CI scans history for secrets

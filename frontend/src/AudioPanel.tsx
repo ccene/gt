@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { api } from "./api";
 import { useApp } from "./store";
 
 export default function AudioPanel() {
@@ -172,5 +171,3 @@ export function useTtsOnNarration() {
     }
   }, [narration]);
 }
-
-void api;

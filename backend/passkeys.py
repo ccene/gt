@@ -5,7 +5,6 @@ authentication options -> browser ceremony -> verify -> issue admin session toke
 Challenges are single-use and short-lived. Credentials stored in SQLite.
 """
 
-import base64
 import secrets
 import time
 
@@ -61,7 +60,22 @@ def _rp_id(origin: str) -> str:
     return urlparse(origin).hostname or "localhost"
 
 
+def validate_origin(origin: str, host_header: str) -> None:
+    """The Origin the client claims must match the Host this request arrived on.
+
+    The RP ID is derived from the Origin, so accepting a foreign Origin would
+    let a caller mint credentials for someone else's RP ID.
+    """
+    from urllib.parse import urlparse
+
+    origin_host = urlparse(origin).hostname or ""
+    request_host = urlparse(f"http://{host_header}").hostname or ""
+    if not origin_host or not request_host or origin_host != request_host:
+        raise ValueError(f"origin {origin!r} does not match host {host_header!r}")
+
+
 def _store_challenge(kind: str, challenge: str, ttl: int = CHALLENGE_TTL_S) -> None:
+    db.execute("DELETE FROM webauthn_challenges WHERE expires_at <= ?", (int(time.time()),))
     db.execute(
         "INSERT INTO webauthn_challenges (kind, challenge, expires_at) VALUES (?, ?, ?)",
         (kind, challenge, int(time.time()) + ttl),
@@ -184,12 +198,9 @@ def verify_authentication(origin: str, credential: dict) -> str:
 def is_valid_admin_session(token: str | None) -> bool:
     if not token:
         return False
+    db.execute("DELETE FROM admin_sessions WHERE expires_at <= datetime('now')")
     row = db.query_one(
         "SELECT expires_at FROM admin_sessions WHERE token = ? AND expires_at > datetime('now')",
         (token,),
     )
     return row is not None
-
-
-def _b64unused() -> str:
-    return base64.b64encode(b"").decode()

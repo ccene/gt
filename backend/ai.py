@@ -189,6 +189,102 @@ async def summarize_notes(transcript: str) -> dict:
     return await chat(messages)
 
 
+def _parse_json_loose(text: str) -> dict | None:
+    """Extract a JSON object from an LLM reply that may wrap it in ``` fences."""
+    if not text:
+        return None
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned
+        cleaned = cleaned.removesuffix("```").strip()
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        return None
+    try:
+        parsed = json.loads(cleaned[start : end + 1])
+    except ValueError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+# Roughly 20 minutes of play per chapter: a 1-hour campaign gets 3 chapters.
+def chapters_for_length(length_hours: float) -> int:
+    return max(3, min(12, round(length_hours * 3)))
+
+
+async def generate_campaign(
+    prompt: str,
+    length_hours: float = 1.0,
+    genre: str = "classic fantasy",
+    tone: str = "heroic",
+) -> dict:
+    """Turn the host's free-text idea into a structured campaign outline.
+
+    Runs only in loading/chapter phases (chat_large), never in the play loop.
+    Always returns a usable dict even if every provider fails (local fallback).
+    """
+    length_hours = max(0.25, min(8.0, float(length_hours)))
+    n_chapters = chapters_for_length(length_hours)
+    system = (
+        "You are a campaign writer for a tabletop RPG. Respond with ONE JSON object only, "
+        "no markdown fences, no commentary. Keys: "
+        "title (string), logline (string), setting (string), "
+        "opening_scene (string, 2-3 sentences the DM can narrate to start), "
+        f"chapters (list of exactly {n_chapters} objects with title, summary, key_scenes (list of 3 short strings)), "
+        "npcs (list of {name, role, one_liner}). "
+        f"The campaign must fit a {length_hours:g}-hour session: each chapter ~20 minutes of play."
+    )
+    user = f"Campaign idea from the host: {prompt or '(improvise something original)'}\nGenre: {genre}. Tone: {tone}."
+    result = await chat_large([{"role": "system", "content": system}, {"role": "user", "content": user}])
+    parsed = _parse_json_loose(result.get("text", ""))
+    if not parsed:
+        # Fallback: keep the raw text so the host still gets something usable.
+        parsed = {
+            "title": f"{genre.title()} adventure",
+            "logline": (result.get("text") or "")[:300],
+            "setting": "",
+            "opening_scene": "",
+            "chapters": [
+                {"title": f"Chapter {i + 1}", "summary": "", "key_scenes": []}
+                for i in range(n_chapters)
+            ],
+            "npcs": [],
+            "raw": result.get("text", ""),
+        }
+    parsed.setdefault("title", f"{genre.title()} adventure")
+    parsed.setdefault("logline", "")
+    parsed.setdefault("opening_scene", "")
+    chapters = parsed.get("chapters")
+    if not isinstance(chapters, list) or not chapters:
+        parsed["chapters"] = [
+            {"title": f"Chapter {i + 1}", "summary": "", "key_scenes": []} for i in range(n_chapters)
+        ]
+    parsed.setdefault("npcs", [])
+    return {
+        "provider": result.get("provider", "local-fallback"),
+        "model": result.get("model"),
+        "length_hours": length_hours,
+        "campaign": parsed,
+    }
+
+
+async def recap_session(events_text: str) -> dict:
+    """"What happened so far" recap — players notoriously forget between beats."""
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are the scribe of a tabletop RPG table. From the session log, write a short "
+                "'recap of what happened so far' in 4-6 bullet points plus a one-line hook for what "
+                "comes next. Present tense, no dice mechanics."
+            ),
+        },
+        {"role": "user", "content": events_text[:8000] or "The session just began."},
+    ]
+    return await chat(messages)
+
+
 def health() -> dict:
     return {
         "mistral_configured": bool(settings.mistral_api_key),

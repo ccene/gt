@@ -43,10 +43,10 @@ jobs:
         run: ruff check .
       - name: Typecheck
         run: mypy .
-      - name: Security scan
+      - name: Security scan (bandit gates the build at medium+ severity)
         run: |
-          pip-audit || true
-          bandit -r . -ll || true
+          bandit -r . -ll
+          pip-audit || true  # advisory report; don't block on upstream advisories
       - name: Tests with coverage gate
         run: pytest --cov=. --cov-fail-under=80
 

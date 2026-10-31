@@ -31,6 +31,28 @@ describe("api client", () => {
     expect((init.headers as Record<string, string>)["X-Admin-Token"]).toBe("tok123");
   });
 
+  it("always sends Content-Type: application/json even without extra headers", async () => {
+    // Regression: spreading `headers: undefined` used to wipe the JSON
+    // content-type, so every PWA POST failed with 422 in the real browser.
+    const f = mockFetch(() => ({ id: 1, code: "ABC123" }));
+    vi.stubGlobal("fetch", f);
+    await api.createSession(null, 60);
+    const [, init] = f.mock.calls[0] as [string, RequestInit];
+    const headers = init.headers as Record<string, string>;
+    expect(headers["Content-Type"]).toBe("application/json");
+    expect(JSON.parse(String(init.body))).toEqual({ story_id: null, campaign_minutes: 60 });
+  });
+
+  it("merges extra headers with the JSON content-type", async () => {
+    const f = mockFetch(() => ({}));
+    vi.stubGlobal("fetch", f);
+    await api.extendCampaign(1, 30, "tok");
+    const [, init] = f.mock.calls[0] as [string, RequestInit];
+    const headers = init.headers as Record<string, string>;
+    expect(headers["Content-Type"]).toBe("application/json");
+    expect(headers["X-Admin-Token"]).toBe("tok");
+  });
+
   it("throws on non-ok response", async () => {
     vi.stubGlobal(
       "fetch",
@@ -39,7 +61,8 @@ describe("api client", () => {
     await expect(api.getSession(999)).rejects.toThrow("404");
   });
 
-  it("builds ws url", () => {
-    expect(wsUrl(5)).toContain("/api/sessions/5/ws");
+  it("builds ws url with the player token", () => {
+    expect(wsUrl(5, "tok123")).toContain("/api/sessions/5/ws");
+    expect(wsUrl(5, "tok123")).toContain("token=tok123");
   });
 });
