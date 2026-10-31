@@ -2,13 +2,31 @@
 
 Usage: python3 scripts/seed_demo.py
 Then: ./scripts/run.sh  and open http://<host>:8000
+
+If backend dependencies are missing, this script re-runs itself with the
+project virtualenv (.venv) when it exists, or tells you to run setup.sh.
 """
 
 import asyncio
+import os
+import subprocess
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
+ROOT = Path(__file__).resolve().parent.parent
+VENV_PY = ROOT / ".venv" / "bin" / "python"
+
+try:
+    import httpx  # noqa: F401
+except ModuleNotFoundError:
+    if VENV_PY.exists():
+        os.execv(str(VENV_PY), [str(VENV_PY), str(Path(__file__).resolve())])
+    sys.exit(
+        "Backend dependencies are not installed for the system Python.\n"
+        "Run ./scripts/setup.sh first (it creates .venv), then re-run this script."
+    )
+
+sys.path.insert(0, str(ROOT / "backend"))
 
 import ai  # noqa: E402
 import db  # noqa: E402

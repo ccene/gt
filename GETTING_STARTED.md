@@ -45,6 +45,9 @@ so the demo still works fully offline.
 python3 scripts/seed_demo.py
 ```
 
+(If you see `ModuleNotFoundError: No module named 'httpx'`, you skipped step 2 —
+run `./scripts/setup.sh` first. The script also auto-uses `.venv` when present.)
+
 This creates a pretend game already in progress:
 - Session code: **DEMO42**
 - Four pretend players: **Aria, Bram, Cleo, Dana** (with character sheets)
