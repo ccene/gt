@@ -17,4 +17,5 @@ else
 fi
 
 echo "Serving on http://${HOST}:${PORT} — open the LAN IP on each player's device"
-exec "$PY" -m uvicorn backend.main:app --host "$HOST" --port "$PORT"
+cd backend
+exec "$PY" -m uvicorn main:app --host "$HOST" --port "$PORT"

@@ -1,5 +1,7 @@
 # D&D Table Companion
 
+👉 **New here? Read [GETTING_STARTED.md](GETTING_STARTED.md) — a step-by-step, plain-English guide including the demo.**
+
 A real-time dungeon-master companion for the game table. A laptop or
 Raspberry Pi hosts the app; players join from phones/iPads over the local
 network via a mobile-first PWA. AI calls go to Mistral (EU-hosted,

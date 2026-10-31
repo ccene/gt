@@ -4,11 +4,13 @@ type Listener = () => void;
 
 export type SetState<T> = (partial: Partial<T> | ((s: T) => Partial<T>)) => void;
 
-export interface StoreHook<T> {
+export interface StoreHook<T extends object> {
   (): T;
   <U>(selector: (s: T) => U): U;
   getState: () => T;
 }
+
+type AnyFn = (...args: never[]) => unknown;
 
 export function create<T extends object>(initializer: (set: SetState<T>) => T): StoreHook<T> {
   let state: T;

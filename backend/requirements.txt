@@ -5,3 +5,4 @@ pydantic>=2.7
 pydantic-settings>=2.3
 faster-whisper>=1.1  # local STT (audio never leaves the host)
 python-multipart>=0.0.9  # UploadFile (mic chunks)
+webauthn>=2.5  # WebAuthn passkeys for host admin
