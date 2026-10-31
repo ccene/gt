@@ -253,8 +253,8 @@ to Mistral's EU endpoints; the host account is protected with MFA/passkeys.
 | P2    | ✅ Mobile-first PWA (React+Vite): join/lobby, character submit, table view, Vitest |
 | P3    | ✅ Real-time: WebSocket sync (dice/map/narration/chat), reconnect snapshot, map view |
 | P4    | ✅ AI adapter: Mistral first, Ollama fallback, deterministic fallback, budget cap, cache; story gen/import; demo seed script |
-| P5    | ⬜ Audio: browser TTS narration, mic capture + local Whisper STT; camera vision (Pixtral) |
+| P5    | ✅ Audio: browser TTS narration, mic capture → local Whisper STT (audio never stored); camera vision via Pixtral (EU, explicit host action, budget-capped) |
 | P6    | ✅ End-of-session save-point emails (SMTP or ./outbox/ in dev)       |
-| P7    | ⬜ Pi deployment hardening: systemd unit, firewall, Playwright e2e on mobile viewports |
+| P7    | ✅ Pi/laptop deployment: systemd unit (hardened), firewall script (default-deny, LAN-only), deploy docs |
 
 Each phase lands as its own PR with tests; CI must stay green throughout.

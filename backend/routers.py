@@ -1,6 +1,6 @@
 import secrets
 
-from fastapi import APIRouter, Header, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Header, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 
 import ai
 import db
@@ -288,6 +288,50 @@ def list_events(session_id: int):
 @api.get("/ai/health")
 def ai_health():
     return ai.health()
+
+
+# --- audio (mic -> local Whisper STT) and vision (camera -> Pixtral EU) ---
+
+@api.post("/sessions/{session_id}/transcribe")
+async def transcribe(session_id: int, file: UploadFile):
+    """Accept an audio chunk (webm/ogg), transcribe locally, store only the text."""
+    _require_session(session_id)
+    data = await file.read()
+    if not data or len(data) > 25 * 1024 * 1024:
+        raise HTTPException(422, "audio chunk missing or too large (25 MB max)")
+    import asyncio
+
+    import audio
+
+    if not audio.available():
+        raise HTTPException(503, "local Whisper (faster-whisper) not installed on host")
+    result = await asyncio.to_thread(audio.transcribe, data)
+    await hub.log_event(session_id, "transcript", result)
+    return result
+
+
+@api.post("/sessions/{session_id}/vision")
+async def vision(session_id: int, payload: dict, x_admin_token: str | None = Header(default=None)):
+    """Explicit host action: describe a camera frame. Broadcasts a 'vision active' notice."""
+    session = _require_session(session_id)
+    _check_admin(session, x_admin_token)
+    import base64
+
+    b64 = str(payload.get("image", ""))
+    if b64.startswith("data:"):
+        b64 = b64.split(",", 1)[1]
+    try:
+        image_bytes = base64.b64decode(b64, validate=True)
+    except Exception as exc:
+        raise HTTPException(422, "image must be base64 (optionally data-URL)") from exc
+    if not image_bytes or len(image_bytes) > 10 * 1024 * 1024:
+        raise HTTPException(422, "image missing or too large (10 MB max)")
+    await hub.log_event(session_id, "vision_active", {"note": "camera frame sent to EU vision model"})
+    import vision
+
+    result = await vision.describe_image(image_bytes, str(payload.get("prompt", "")))
+    await hub.log_event(session_id, "vision", result)
+    return result
 
 
 # --- websocket ---
