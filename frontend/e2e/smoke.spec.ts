@@ -50,7 +50,7 @@ test("player joining a session already in play still gets the character form", a
 
   const player = await context.newPage();
   await player.goto("/");
-  await player.getByPlaceholder("Aria").fill("Aria");
+  await player.getByPlaceholder("Aria", { exact: true }).fill("Aria");
   await player.getByPlaceholder("ABC123").fill(code);
   await player.getByRole("button", { name: /Join session/i }).click();
   // even though the session is 'playing', the player must be able to create a character
