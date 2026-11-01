@@ -59,6 +59,7 @@ function JoinScreen() {
       if (!player) player = await api.createPlayer(name.trim(), email.trim());
       const joined = await api.joinSession(code.trim().toUpperCase(), player.id);
       useApp.getState().setPlayerToken(joined.player_token);
+      useApp.getState().setPlayerId(player.id);
       useApp.getState().setSnapshot(joined.snapshot);
     } catch (e) {
       setError((e as Error).message);
@@ -148,6 +149,7 @@ function JoinScreen() {
               useApp.getState().setAdminToken(hosted.admin_token ?? "");
               void api.joinSession(hosted.code).then((j) => {
                 useApp.getState().setPlayerToken(j.player_token);
+                useApp.getState().setPlayerId(null);
                 useApp.getState().setSnapshot(j.snapshot);
               });
             }}
@@ -161,6 +163,8 @@ function JoinScreen() {
 }
 
 function CharacterForm() {
+  const myPlayerId = useApp((s) => s.playerId);
+  const myCharacter = useApp((s) => s.characters.find((c) => c.player_id === s.playerId));
   const [players, setPlayers] = useState<Player[]>([]);
   const [playerId, setPlayerId] = useState<number | null>(null);
   const [charName, setCharName] = useState("");
@@ -172,6 +176,20 @@ function CharacterForm() {
   useEffect(() => {
     void api.listPlayers().then(setPlayers).catch(() => {});
   }, []);
+
+  // prefill from the player's existing character (if any) and default the select
+  useEffect(() => {
+    if (myPlayerId != null) setPlayerId(myPlayerId);
+  }, [myPlayerId]);
+  const myCharId = myCharacter?.id;
+  useEffect(() => {
+    if (myCharacter) {
+      setCharName(myCharacter.name);
+      setHp(Number(myCharacter.sheet.hp ?? 20));
+      setCharClass(String(myCharacter.sheet.class ?? "Fighter"));
+      setLevel(Number(myCharacter.sheet.level ?? 1));
+    }
+  }, [myCharId]);
 
   const submit = async () => {
     if (!playerId) return;
@@ -366,27 +384,67 @@ function TableView() {
   );
 }
 
+function SessionEndedBanner() {
+  const s = useApp((st) => st);
+  if (s.state !== "ended") return null;
+  return (
+    <div className="panel" data-testid="session-ended-banner" style={{ borderColor: "var(--ok)" }}>
+      <h2>🏁 Session ended</h2>
+      {s.endedEmails.length > 0 ? (
+        <ul className="hero-list">
+          {s.endedEmails.map((e, i) => (
+            <li key={i}>
+              <strong>{e.character ?? e.player ?? "player"}</strong>{" "}
+              <span className="muted">
+                {e.error ? `save point failed: ${e.error}` : e.sent ? `save point emailed (${e.via})` : `save point saved to ${e.via ?? "outbox"}`}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="muted">No save points to send (no players with characters joined).</p>
+      )}
+    </div>
+  );
+}
+
 function HostControls() {
   const s = useApp((st) => st);
   const [scene, setScene] = useState("The party enters the torch-lit crypt.");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
   if (!s.adminToken) return null;
+
+  const endSession = async () => {
+    if (s.sessionId == null) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api.setState(s.sessionId, "ended", s.adminToken);
+    } catch (e) {
+      setError(`Could not end session: ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="panel">
       <h2>Host controls</h2>
       <div className="row">
-        {s.state !== "playing" && (
+        {s.state !== "playing" && s.state !== "ended" && (
           <button className="primary" onClick={() => s.sessionId && api.setState(s.sessionId, "playing", s.adminToken)}>
             Start session
           </button>
         )}
         <button onClick={() => s.sessionId && api.nextChapter(s.sessionId, s.adminToken)}>Next chapter</button>
-        <button
-          className="danger"
-          onClick={() => s.sessionId && api.setState(s.sessionId, "ended", s.adminToken)}
-        >
-          End session (email save points)
-        </button>
+        {s.state !== "ended" && (
+          <button className="danger" disabled={busy} onClick={endSession}>
+            {busy ? "Ending…" : "End session (email save points)"}
+          </button>
+        )}
       </div>
+      {error && <p className="error">{error}</p>}
       <label>
         Scene
         <input value={scene} onChange={(e) => setScene(e.target.value)} />
@@ -403,12 +461,17 @@ export default function App() {
   const sessionId = useApp((s) => s.sessionId);
   const state = useApp((s) => s.state);
   const code = useApp((s) => s.code);
+  const playerId = useApp((s) => s.playerId);
+  const myCharacter = useApp((s) => s.characters.find((c) => c.player_id === s.playerId));
   useEffect(() => {
     if (sessionId != null) return connectWs(sessionId);
     return undefined;
   }, [sessionId]);
 
   if (sessionId == null) return <JoinScreen />;
+  // The character form shows in the lobby, and for any player who has not
+  // created a character yet — even if the session is already in play.
+  const showCharacterForm = state === "lobby" || (playerId != null && !myCharacter);
   return (
     <div className="screen">
       <header className="topbar">
@@ -416,7 +479,8 @@ export default function App() {
         <span className="code-badge">code {code}</span>
       </header>
       <PasskeyPanel />
-      {state === "lobby" && <CharacterForm />}
+      {state === "ended" && <SessionEndedBanner />}
+      {showCharacterForm && <CharacterForm />}
       <StoryPanel />
       <CampaignBar />
       <TableView />

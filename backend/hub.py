@@ -79,7 +79,13 @@ class Hub:
             "story": story_of(session_id),
             "combat": combat_of(session_id),
             "characters": [
-                {"id": c["id"], "name": c["name"], "player": c["player"], "sheet": db.loads(c["sheet"])}
+                {
+                    "id": c["id"],
+                    "player_id": c["player_id"],
+                    "name": c["name"],
+                    "player": c["player"],
+                    "sheet": db.loads(c["sheet"]),
+                }
                 for c in characters
             ],
             "maps": [{"id": m["id"], "label": m["label"], "markers": db.loads(m["markers"])} for m in maps],
@@ -99,7 +105,7 @@ def session_characters(session_id: int) -> list:
     snapshot is scoped so sessions never leak each other's heroes.
     """
     return db.query(
-        "SELECT c.id, c.name, c.sheet, p.name AS player FROM characters c"
+        "SELECT c.id, c.player_id, c.name, c.sheet, p.name AS player FROM characters c"
         " JOIN players p ON p.id = c.player_id"
         " WHERE NOT EXISTS (SELECT 1 FROM session_players sp"
         "   WHERE sp.session_id = ? AND sp.player_id IS NOT NULL)"

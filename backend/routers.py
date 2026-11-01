@@ -112,7 +112,7 @@ def list_players():
 
 
 @api.post("/players/{player_id}/character")
-def submit_character(player_id: int, payload: dict):
+async def submit_character(player_id: int, payload: dict):
     if not db.query_one("SELECT id FROM players WHERE id = ?", (player_id,)):
         raise HTTPException(404, "player not found")
     name = str(payload.get("name", "")).strip()
@@ -135,6 +135,12 @@ def submit_character(player_id: int, payload: dict):
         )
         cid = cur.lastrowid
     _audit(None, f"player:{player_id}", "character.submit", {"character_id": cid, "name": name})
+    # broadcast to every session this player joined so hero lists update live
+    event = {"id": cid, "name": name, "sheet": sheet}
+    for row in db.query(
+        "SELECT DISTINCT session_id FROM session_players WHERE player_id = ?", (player_id,)
+    ):
+        await hub.log_event(row["session_id"], "character", event)
     return {"id": cid, "player_id": player_id, "name": name, "sheet": sheet}
 
 
@@ -275,7 +281,10 @@ async def set_state(session_id: int, payload: dict, x_admin_token: str | None = 
         session = _require_session(session_id)
         await hub.log_event(session_id, "campaign", campaign_of(session))
     if new_state == "ended":
-        emails = send_all_save_points(session_id)
+        try:
+            emails = send_all_save_points(session_id)
+        except Exception as exc:  # ending the session must always succeed
+            emails = [{"error": f"{type(exc).__name__}: {exc}"}]
         await hub.log_event(session_id, "session_ended", {"emails": emails})
     await hub.log_event(session_id, "state", {"state": new_state})
     _audit(session_id, "host", "session.state", {"state": new_state})

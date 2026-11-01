@@ -304,3 +304,51 @@ def test_seed_demo_is_idempotent_and_complete(tmp_path):
     content = db.loads(story["content"])
     assert "campaign" in content and len(content["campaign"]["chapters"]) == 3
     db.reset_for_tests(db_file)
+
+
+# --- end-session must never fail the state change, even if email is broken ---
+
+def test_save_points_survive_broken_email_backend(client, session, monkeypatch):
+    import emailer
+
+    p, _c = _mk_player_with_character(client, "Aria", "AriaC")
+    _join(client, session["code"], player_id=p["id"])
+
+    def boom(*args, **kwargs):
+        raise OSError("smtp unreachable")
+
+    monkeypatch.setattr(emailer, "send_save_point", boom)
+    results = emailer.send_all_save_points(session["id"])  # must not raise
+    assert len(results) == 1
+    assert results[0]["character"] == "AriaC"
+    assert "error" in results[0] or results[0].get("sent") is False
+
+
+def test_end_session_returns_200_even_if_emailing_explodes(client, session, monkeypatch):
+    import routers
+
+    p, _c = _mk_player_with_character(client, "Bob", "BobC")
+    _join(client, session["code"], player_id=p["id"])
+
+    def explode(sid):
+        raise RuntimeError("email subsystem down")
+
+    monkeypatch.setattr(routers, "send_all_save_points", explode)
+    r = client.post(
+        f"/api/sessions/{session['id']}/state",
+        json={"state": "ended"},
+        headers={"X-Admin-Token": session["admin_token"]},
+    )
+    assert r.status_code == 200, f"expected 200, got {r.status_code}: {r.text}"
+    assert r.json()["state"] == "ended"
+    events = client.get(f"/api/sessions/{session['id']}/events").json()
+    kinds = [e["kind"] for e in events]
+    assert "session_ended" in kinds  # the end is still announced on the channel
+
+
+def test_snapshot_characters_carry_player_id(client, session):
+    p, _c = _mk_player_with_character(client, "Cleo", "CleoC")
+    _join(client, session["code"], player_id=p["id"])
+    snap = _join(client, session["code"], player_id=p["id"]).json()["snapshot"]
+    ch = [c for c in snap["characters"] if c["name"] == "CleoC"][0]
+    assert ch.get("player_id") == p["id"]

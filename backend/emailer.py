@@ -69,8 +69,11 @@ def send_all_save_points(session_id: int) -> list[dict]:
         (session_id, session_id),
     )
     for row in rows:
-        result = send_save_point(
-            row["email"], row["player"], row["character"], db.loads(row["sheet"]), save_point
-        )
+        try:
+            result = send_save_point(
+                row["email"], row["player"], row["character"], db.loads(row["sheet"]), save_point
+            )
+        except Exception as exc:  # a broken SMTP must never fail the session end
+            result = {"sent": False, "via": "error", "error": f"{type(exc).__name__}: {exc}"}
         results.append({"player": row["player"], "character": row["character"], **result})
     return results

@@ -70,7 +70,7 @@ export interface Snapshot {
   campaign: CampaignInfo;
   story: Story | null;
   combat: CombatState;
-  characters: { id: number; name: string; player: string; sheet: Record<string, unknown> }[];
+  characters: { id: number; player_id?: number; name: string; player: string; sheet: Record<string, unknown> }[];
   maps: { id: number; label: string; markers: MapMarker[] }[];
   events: { kind: string; payload: unknown; at: string }[];
   clients: number;

@@ -21,6 +21,8 @@ export interface AppState {
   code: string;
   adminToken: string;
   playerToken: string;
+  playerId: number | null;
+  endedEmails: { player?: string; character?: string; sent?: boolean; via?: string; error?: string }[];
   state: string;
   chapterIndex: number;
   savePoint: Record<string, unknown>;
@@ -28,7 +30,7 @@ export interface AppState {
   story: Story | null;
   combat: CombatState;
   clients: number;
-  characters: { id: number; name: string; player: string; sheet: Record<string, unknown> }[];
+  characters: { id: number; player_id?: number; name: string; player: string; sheet: Record<string, unknown> }[];
   maps: { id: number; label: string; markers: { x: number; y: number; label: string }[] }[];
   dice: DiceEvent[];
   narration: string[];
@@ -49,6 +51,7 @@ export interface AppState {
   setConnected: (v: boolean) => void;
   setAdminToken: (t: string) => void;
   setPlayerToken: (t: string) => void;
+  setPlayerId: (id: number | null) => void;
   reset: () => void;
 }
 
@@ -57,6 +60,8 @@ const initial = {
   code: "",
   adminToken: "",
   playerToken: "",
+  playerId: null,
+  endedEmails: [],
   state: "lobby",
   chapterIndex: 0,
   savePoint: {},
@@ -132,6 +137,8 @@ export const useApp = create<AppState>((set: (p: Partial<AppState> | ((s: AppSta
       }
       if (kind === "state")
         return { state: (payload as { state: string }).state };
+      if (kind === "session_ended")
+        return { endedEmails: (payload as { emails: AppState["endedEmails"] }).emails ?? [] };
       if (kind === "chapter")
         return {
           chapterIndex: (payload as { chapter_index: number }).chapter_index,
@@ -144,5 +151,6 @@ export const useApp = create<AppState>((set: (p: Partial<AppState> | ((s: AppSta
   setConnected: (v: boolean) => set({ connected: v }),
   setAdminToken: (t: string) => set({ adminToken: t }),
   setPlayerToken: (t: string) => set({ playerToken: t }),
+  setPlayerId: (id: number | null) => set({ playerId: id }),
   reset: () => set(initial),
 }));

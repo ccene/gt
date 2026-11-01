@@ -19,8 +19,17 @@ function bufToB64u(buf: ArrayBuffer): string {
 export default function PasskeyPanel() {
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const [tokenInput, setTokenInput] = useState("");
   const setAdmin = (token: string) => {
     useApp.getState().setAdminToken(token);
+  };
+
+  const useToken = () => {
+    const t = tokenInput.trim();
+    if (!t) return;
+    setAdmin(t);
+    setStatus("Admin token accepted — host controls unlocked ✓");
+    setError("");
   };
 
   const register = async () => {
@@ -110,14 +119,27 @@ export default function PasskeyPanel() {
     }
   };
 
-  if (!("credentials" in navigator)) return null;
+  const webauthn = "credentials" in navigator;
   return (
     <div className="panel">
-      <h2>🔑 Host passkey</h2>
+      <h2>🔑 Host login</h2>
+      {webauthn && (
+        <div className="row">
+          <button onClick={register}>Register passkey</button>
+          <button className="primary" onClick={login}>
+            Sign in with passkey
+          </button>
+        </div>
+      )}
       <div className="row">
-        <button onClick={register}>Register passkey</button>
-        <button className="primary" onClick={login}>
-          Sign in with passkey
+        <input
+          value={tokenInput}
+          onChange={(e) => setTokenInput(e.target.value)}
+          placeholder="…or paste the session admin token"
+          aria-label="admin token"
+        />
+        <button onClick={useToken} disabled={!tokenInput.trim()}>
+          Use token
         </button>
       </div>
       {status && <p className="ok">{status}</p>}
