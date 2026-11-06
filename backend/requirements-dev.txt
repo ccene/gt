@@ -4,6 +4,6 @@ pytest-asyncio>=0.23
 pytest-cov>=5.0
 ruff>=0.5
 mypy>=1.10
-types-requests>=2.32
+types-requests>=2.33.0.20261030
 bandit>=1.8    # security scan — CI runs it hard (fails the build at -ll)
 pip-audit>=2.7 # dependency advisory scan — CI runs it informational
