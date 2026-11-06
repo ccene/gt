@@ -22,7 +22,7 @@ jobs:
         run: bash scripts/check-repo.sh
       - name: Secret scan (gitleaks)
         if: github.event_name == 'push'
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
 
   backend:
     name: Backend (lint, types, tests)
